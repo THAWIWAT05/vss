@@ -24,7 +24,7 @@ jobs:
           from pathlib import PurePosixPath, Path
 
           root = Path.cwd()
-          archive = root / "GANG_CONTROL_FIVEM_DAILY_V4_RENDER_POSTGRES.zip"
+          archive = root / "GANG_CONTROL_FIVEM_DAILY_V4_MEMBER_OVERVIEW.zip"
 
           if not archive.exists():
               raise Exception("ไม่พบ GANG_CONTROL_DAILY.zip")
