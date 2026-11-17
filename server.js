@@ -32,10 +32,7 @@ const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok',
 const isoNow = () => new Date().toISOString();
 const seed = () => ({
   users: [
-    { id: 1, username: process.env.ADMIN_USERNAME || 'admin', passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 10), name: 'ผู้ดูแลระบบ', role: 'admin', memberId: null, active: true },
-    { id: 102, username: 'shadow', passwordHash: bcrypt.hashSync('Member123!', 10), name: 'Shadow', role: 'member', memberId: 101, active: true },
-    { id: 103, username: 'raven', passwordHash: bcrypt.hashSync('Member123!', 10), name: 'Raven', role: 'member', memberId: 102, active: true },
-    { id: 104, username: 'ghost', passwordHash: bcrypt.hashSync('Member123!', 10), name: 'Ghost', role: 'member', memberId: 103, active: true }
+    { id: 1, username: process.env.ADMIN_USERNAME || 'admin', passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 10), name: 'ผู้ดูแลระบบ', role: 'admin', memberId: null, active: true }
   ],
   members: [
     { id: 101, name: 'Shadow', gameId: 'license:shadow', rank: 'หัวหน้าแก๊ง', active: true, joinedAt: today() },
