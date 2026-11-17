@@ -1,5 +1,7 @@
 # GANG CONTROL DAILY — ระบบจัดการแก๊ง FiveM
 
+https://vss-1-f54x.onrender.co: admin   ChangeMe123!
+
 เว็บแอปภาษาไทยสำหรับใช้งานใน VS Code ด้วย Node.js
 
 ## ฟังก์ชันหลัก
