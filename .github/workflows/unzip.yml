@@ -1,0 +1,100 @@
+
+name: Extract ZIP to Repository Root
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract ZIP
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import PurePosixPath, Path
+
+          root = Path.cwd()
+          archive = root / "GANG_CONTROL_DAILY.zip"
+
+          if not archive.exists():
+              raise Exception("ไม่พบ GANG_CONTROL_DAILY.zip")
+
+          with zipfile.ZipFile(archive) as z:
+              entries = [
+                  i for i in z.infolist()
+                  if not i.is_dir()
+              ]
+
+              if not entries:
+                  raise Exception("ไม่พบไฟล์ภายใน ZIP")
+
+              paths = [
+                  PurePosixPath(i.filename)
+                  for i in entries
+              ]
+
+              # ตรวจสอบว่ามีโฟลเดอร์หลักเพียงโฟลเดอร์เดียวหรือไม่
+              first = {p.parts[0] for p in paths if p.parts}
+
+              strip_root = (
+                  len(first) == 1
+                  and all(len(p.parts) > 1 for p in paths)
+              )
+
+              for info, path in zip(entries, paths):
+
+                  parts = path.parts
+
+                  if strip_root:
+                      parts = parts[1:]
+
+                  if not parts:
+                      continue
+
+                  if any(
+                      p in (".", "..", ".git", "node_modules")
+                      or p == ".env"
+                      or p.startswith(".env.")
+                      for p in parts
+                  ):
+                      continue
+
+                  target = root.joinpath(*parts).resolve()
+
+                  if not target.is_relative_to(root.resolve()):
+                      raise Exception("พบเส้นทางไฟล์ที่ไม่ปลอดภัย")
+
+                  target.parent.mkdir(
+                      parents=True,
+                      exist_ok=True
+                  )
+
+                  with z.open(info) as src:
+                      target.write_bytes(src.read())
+
+          print("แตกไฟล์สำเร็จ!")
+          PY
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Extract GANG_CONTROL_DAILY to root"
+            git push origin HEAD:main
+          else
+            echo "ไม่มีไฟล์เปลี่ยนแปลง"
+          fi
