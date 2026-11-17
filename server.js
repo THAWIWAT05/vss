@@ -284,6 +284,22 @@ app.post('/api/items', auth, adminOnly, (req, res) => {
   const item = { id: Date.now(), name: String(name).trim(), category: String(category || 'ทั่วไป'), qty: Math.max(0, Number(qty) || 0), unit: String(unit || 'ชิ้น'), min: Math.max(0, Number(min) || 0) };
   db.items.push(item); log(db, req.session.user.name, 'เพิ่มไอเทมในคลัง', item.name); writeDB(db); res.json(item);
 });
+// Admin can adjust the current stock quantity directly.
+app.patch('/api/items/:id/quantity', auth, adminOnly, (req,res) => {
+  const db = readDB();
+  const item = db.items.find(i => i.id === Number(req.params.id));
+  const qty = Number(req.body?.qty);
+  if (!item) return res.status(404).json({ error: 'ไม่พบไอเทมในคลัง' });
+  if (!Number.isSafeInteger(qty) || qty < 0 || qty > 1000000000) {
+    return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
+  }
+  const oldQty = item.qty;
+  item.qty = qty;
+  log(db, req.session.user.name, 'แก้ไขจำนวนไอเทมในคลัง', `${item.name} · ${oldQty} → ${qty} ${item.unit}`);
+  writeDB(db);
+  res.json(item);
+});
+
 app.delete('/api/items/:id', auth, adminOnly, (req,res) => {
   const db=readDB(), idx=db.items.findIndex(i=>i.id===Number(req.params.id));
   if(idx<0)return res.status(404).json({error:'ไม่พบไอเทมในคลัง'});
