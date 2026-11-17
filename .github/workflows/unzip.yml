@@ -1,5 +1,5 @@
 
-name: แตก ZIP ไปหน้าแรก Repository
+name: Extract ZIP to Repository Root
 
 on:
   workflow_dispatch:
@@ -12,101 +12,89 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Extract ZIP to root
+      - name: Extract ZIP
         run: |
           python3 - <<'PY'
           import zipfile
-          import shutil
-          from pathlib import Path
+          from pathlib import PurePosixPath, Path
 
-          root = Path.cwd().resolve()
+          root = Path.cwd()
           archive = root / "GANG_CONTROL_DAILY.zip"
 
           if not archive.exists():
-              raise FileNotFoundError("ไม่พบ ZIP")
+              raise Exception("ไม่พบ GANG_CONTROL_DAILY.zip")
 
           with zipfile.ZipFile(archive) as z:
-              files = [
+              entries = [
                   i for i in z.infolist()
                   if not i.is_dir()
               ]
 
-              if not files:
-                  raise Exception("ZIP ไม่มีไฟล์")
+              if not entries:
+                  raise Exception("ไม่พบไฟล์ภายใน ZIP")
 
-              # ตรวจสอบโฟลเดอร์หลักของ ZIP
-              first_parts = [
-                  Path(i.filename).parts[0]
-                  for i in files
-                  if Path(i.filename).parts
+              paths = [
+                  PurePosixPath(i.filename)
+                  for i in entries
               ]
 
-              common_folder = None
+              # ตรวจสอบว่ามีโฟลเดอร์หลักเพียงโฟลเดอร์เดียวหรือไม่
+              first = {p.parts[0] for p in paths if p.parts}
 
-              if (
-                  first_parts
-                  and len(set(first_parts)) == 1
-                  and all(
-                      len(Path(i.filename).parts) > 1
-                      for i in files
-                  )
-              ):
-                  common_folder = first_parts[0]
+              strip_root = (
+                  len(first) == 1
+                  and all(len(p.parts) > 1 for p in paths)
+              )
 
-              # ลบโฟลเดอร์เดิมที่แตกไว้ก่อนหน้า
-              if common_folder:
-                  old = (root / common_folder).resolve()
+              for info, path in zip(entries, paths):
 
-                  if old.parent == root and old.is_dir():
-                      shutil.rmtree(old)
+                  parts = path.parts
 
-              # แตกไฟล์ทั้งหมดไปยัง Root
-              for item in z.infolist():
-                  parts = Path(item.filename).parts
-
-                  if not parts:
-                      continue
-
-                  if common_folder:
+                  if strip_root:
                       parts = parts[1:]
 
                   if not parts:
                       continue
 
                   if any(
-                      p == ".git"
-                      or p == "node_modules"
+                      p in (".", "..", ".git", "node_modules")
                       or p == ".env"
                       or p.startswith(".env.")
                       for p in parts
                   ):
                       continue
 
-                  target = (root / Path(*parts)).resolve()
+                  target = root.joinpath(*parts).resolve()
 
-                  if not target.is_relative_to(root):
-                      continue
+                  if not target.is_relative_to(root.resolve()):
+                      raise Exception("พบเส้นทางไฟล์ที่ไม่ปลอดภัย")
 
-                  if item.is_dir():
-                      target.mkdir(parents=True, exist_ok=True)
-                  else:
-                      target.parent.mkdir(
-                          parents=True, exist_ok=True
-                      )
+                  target.parent.mkdir(
+                      parents=True,
+                      exist_ok=True
+                  )
 
-                      with z.open(item) as src:
-                          target.write_bytes(src.read())
+                  with z.open(info) as src:
+                      target.write_bytes(src.read())
 
-          print("แตกไฟล์ไปหน้าแรกสำเร็จ!")
+          print("แตกไฟล์สำเร็จ!")
           PY
 
       - name: Commit and Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add -A
-          git commit -m "Move project files to repository root" || echo "No changes"
-          git push
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Extract GANG_CONTROL_DAILY to root"
+            git push origin HEAD:main
+          else
+            echo "ไม่มีไฟล์เปลี่ยนแปลง"
+          fi
