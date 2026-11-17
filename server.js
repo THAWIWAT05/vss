@@ -137,6 +137,34 @@ app.post('/api/login', (req, res) => {
 app.post('/api/logout', auth, (req, res) => req.session.destroy(() => res.json({ ok: true })));
 app.get('/api/me', (req, res) => res.json({ user: req.session.user || null, isAdmin: !!admin(req) }));
 
+// Admin report data for dashboard and exports. All date filtering is performed server-side.
+app.get('/api/reports', auth, adminOnly, (req, res) => {
+  const db = readDB();
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  const validDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!validDate(from) || !validDate(to) || (from && to && from > to)) {
+    return res.status(400).json({ error: 'ช่วงวันที่ไม่ถูกต้อง' });
+  }
+  const inRange = value => {
+    const d = String(value || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) && (!from || d >= from) && (!to || d <= to);
+  };
+  const byCreated = value => inRange(value);
+  res.json({
+    range: { from, to }, generatedAt: isoNow(),
+    members: db.members,
+    items: db.items,
+    attendance: db.attendance.filter(a => inRange(a.date)).slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time)),
+    dailyTasks: db.dailyTasks.filter(t => inRange(t.date)),
+    contributions: db.contributions.filter(c => inRange(c.date)),
+    withdrawals: db.withdrawals.filter(w => byCreated(w.createdAt)),
+    deliveries: db.deliveries.filter(d => byCreated(d.createdAt)),
+    requests: db.requests.filter(r => byCreated(r.createdAt)),
+    logs: db.logs.filter(l => byCreated(l.createdAt))
+  });
+});
+
 app.get('/api/data', auth, (req, res) => {
   const db = readDB(); const isAdmin = admin(req); const member = getMember(db, req.session.user);
   const viewDate = String(req.query.date || today());
