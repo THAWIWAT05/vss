@@ -25,7 +25,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: isLocal
 const SESSIONS = [
   { id: 's1630', label: 'รอบที่ 1', time: '16:30' },
   { id: 's2030', label: 'รอบที่ 2', time: '20:30' },
-  { id: 's2350', label: 'รอบที่ 3', time: '23:50' }
+  { id: 's2350', label: 'รอบที่ 3', time: '23:30' }
 ];
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
