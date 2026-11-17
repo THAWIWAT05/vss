@@ -149,7 +149,7 @@ app.get('/api/data', auth, (req, res) => {
     dailyTasks: db.dailyTasks.slice().sort((a,b) => b.date.localeCompare(a.date)),
     contributions: isAdmin ? db.contributions : db.contributions.filter(c => c.memberId === req.session.user.memberId),
     withdrawals: isAdmin ? db.withdrawals.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)) : [],
-    attendanceHistory: isAdmin ? db.attendance.slice().sort((a,b) => b.date.localeCompare(a.date)).slice(0, 500) : db.attendance.filter(a => a.memberId === req.session.user.memberId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 100),
+    attendanceHistory: isAdmin ? db.attendance.slice().sort((a,b) => b.date.localeCompare(a.date) || String(b.time || '').localeCompare(String(a.time || ''))) : db.attendance.filter(a => a.memberId === req.session.user.memberId).sort((a,b) => b.date.localeCompare(a.date) || String(b.time || '').localeCompare(String(a.time || ''))).slice(0, 100),
     requests: isAdmin ? db.requests.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)) : db.requests.filter(r => r.memberId === req.session.user.memberId).sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
     deliveries: isAdmin ? db.deliveries.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)) : db.deliveries.filter(d => d.memberId === req.session.user.memberId).sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
     logs: isAdmin ? db.logs.slice(0, 100) : []
