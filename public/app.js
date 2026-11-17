@@ -80,8 +80,12 @@ function history(){
    <p class="muted-note">ประวัติการส่งของและคำขอเบิกจะแสดงในแต่ละเมนู</p>
  </div>`;
 
- // ใช้รายชื่อทั้งหมด รวมสมาชิกที่ถูกนำออก เพื่อไม่ให้ประวัติเดิมหายไป
- const members = state.memberHistory || state.members;
+ // ใช้รายชื่อทั้งหมดเพื่อเก็บประวัติเดิมไว้ แต่ซ่อนสมาชิกเริ่มต้น
+ // ที่ไม่ต้องการให้แสดงในหน้าประวัติ
+ const hiddenHistoryNames = new Set(['shadow', 'raven', 'ghost']);
+ const members = (state.memberHistory || state.members).filter(m =>
+   !hiddenHistoryNames.has(String(m.name || '').trim().toLocaleLowerCase('th'))
+ );
 
  const summary = members.map(m => {
    const records = state.attendanceHistory.filter(
