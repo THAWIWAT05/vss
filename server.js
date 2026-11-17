@@ -143,7 +143,10 @@ app.get('/api/data', auth, (req, res) => {
   res.json({
     user: req.session.user, isAdmin, today: today(), viewDate, sessions: SESSIONS,
     summary: { members: db.members.filter(m => m.active).length, items: db.items.length, pendingRequests: db.requests.filter(r => r.status === 'pending').length, pendingDeliveries: db.deliveries.filter(d => d.status === 'pending').length },
-    members: isAdmin ? db.members : (member ? [member] : []),
+    // รายชื่อสมาชิกที่ใช้งานอยู่สำหรับหน้าทั่วไป
+    members: isAdmin ? db.members.filter(m => m.active) : (member && member.active ? [member] : []),
+    // เก็บรายชื่อทั้งหมดไว้ให้หน้า History แสดงประวัติของสมาชิกที่ถูกนำออกแล้วได้
+    memberHistory: isAdmin ? db.members : (member ? [member] : []),
     items: db.items,
     attendance: isAdmin ? db.attendance.filter(a => a.date === viewDate) : db.attendance.filter(a => a.date === viewDate && a.memberId === req.session.user.memberId),
     dailyTasks: db.dailyTasks.slice().sort((a,b) => b.date.localeCompare(a.date)),
@@ -281,23 +284,6 @@ app.post('/api/items', auth, adminOnly, (req, res) => {
   const item = { id: Date.now(), name: String(name).trim(), category: String(category || 'ทั่วไป'), qty: Math.max(0, Number(qty) || 0), unit: String(unit || 'ชิ้น'), min: Math.max(0, Number(min) || 0) };
   db.items.push(item); log(db, req.session.user.name, 'เพิ่มไอเทมในคลัง', item.name); writeDB(db); res.json(item);
 });
-app.patch('/api/items/:id/quantity', auth, adminOnly, (req, res) => {
-  const db = readDB();
-  const item = db.items.find(i => i.id === Number(req.params.id));
-  if (!item) return res.status(404).json({ error: 'ไม่พบไอเทมในคลัง' });
-
-  const qty = Number(req.body?.qty);
-  if (!Number.isInteger(qty) || qty < 0 || qty > 1000000) {
-    return res.status(400).json({ error: 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 0 ถึง 1,000,000' });
-  }
-
-  const oldQty = Number(item.qty) || 0;
-  item.qty = qty;
-  log(db, req.session.user.name, 'แก้ไขจำนวนไอเทม', `${item.name} · ${oldQty} → ${qty} ${item.unit}`);
-  writeDB(db);
-  res.json({ ok: true, item });
-});
-
 app.delete('/api/items/:id', auth, adminOnly, (req,res) => {
   const db=readDB(), idx=db.items.findIndex(i=>i.id===Number(req.params.id));
   if(idx<0)return res.status(404).json({error:'ไม่พบไอเทมในคลัง'});
