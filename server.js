@@ -191,16 +191,17 @@ app.post('/api/attendance/bulk', auth, adminOnly, (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const db = readDB();
   if (!slot || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !rows.length) return res.status(400).json({error:'ข้อมูลเช็กชื่อไม่ถูกต้อง'});
-  const allowed = ['present','late','absent','leave','business'];
+  const allowed = ['present','late','absent','leave','business','unmarked'];
   for (const x of rows) {
     const m = db.members.find(y => y.id === Number(x.memberId) && y.active);
-    if (!m || !allowed.includes(x.status)) return res.status(400).json({error:'กรุณาเลือกสถานะสมาชิกให้ครบทุกคน'});
+    if (!m || !allowed.includes(x.status)) return res.status(400).json({error:'ข้อมูลสถานะสมาชิกไม่ถูกต้อง'});
   }
   for (const x of rows) {
-    const m = db.members.find(y => y.id === Number(x.memberId));
+    const m = db.members.find(y => y.id === Number(x.memberId) && y.active);
     let a = db.attendance.find(y => y.date === date && y.memberId === m.id && y.sessionId === slot.id);
     if (!a) { a = {id:Date.now()+Math.floor(Math.random()*100000),date,memberId:m.id,memberName:m.name,sessionId:slot.id,sessionLabel:slot.label,time:slot.time,createdAt:isoNow()}; db.attendance.push(a); }
-    Object.assign(a,{status:x.status,note:String(x.note||'').trim(),markedBy:req.session.user.name,updatedAt:isoNow()});
+    const finalStatus = x.status === 'unmarked' ? 'present' : x.status;
+    Object.assign(a,{status:finalStatus,note:String(x.note||'').trim(),markedBy:req.session.user.name,updatedAt:isoNow()});
   }
   log(db,req.session.user.name,'บันทึกเช็กชื่อทั้งหมด',`${date} · ${slot.label} · ${rows.length} คน`);
   writeDB(db); res.json({ok:true,count:rows.length});
