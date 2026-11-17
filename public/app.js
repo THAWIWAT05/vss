@@ -142,6 +142,7 @@ function history(){
    </div>
  </div>
  <div id="historyMemberList">${summary}</div>
+ <div id="historyNoResults" class="panel muted-note" hidden>ไม่พบชื่อสมาชิกที่ตรงกับคำค้นหา</div>
  `;
 }
 
@@ -152,6 +153,24 @@ function history(){
 function openModal(title,html,onSubmit){const root=$('#modalRoot');root.innerHTML=`<div class="modal-back"><form class="modal"><h3>${title}</h3>${html}<div class="modal-actions"><button type="button" class="btn" data-close>ยกเลิก</button><button class="btn primary">บันทึก</button></div></form></div>`;root.querySelector('[data-close]').onclick=()=>root.innerHTML='';root.querySelector('.modal-back').onclick=e=>{if(e.target.classList.contains('modal-back'))root.innerHTML=''};root.querySelector('form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await onSubmit(data);root.innerHTML='';await refresh()}catch(err){toast(err.message)}}}
 
 function wire(){
+ // ค้นหาชื่อสมาชิกในหน้าประวัติการขาด/ลา/ติดธุระ
+ const historySearch = $('#historyMemberSearch');
+ historySearch?.addEventListener('input', () => {
+   const keyword = historySearch.value.trim().toLocaleLowerCase('th');
+   const cards = [...document.querySelectorAll('#historyMemberList .history-member-card')];
+   let visibleCount = 0;
+
+   cards.forEach(card => {
+     const memberName = (card.dataset.memberName || '').toLocaleLowerCase('th');
+     const matched = !keyword || memberName.includes(keyword);
+     card.hidden = !matched;
+     if (matched) visibleCount++;
+   });
+
+   const noResults = $('#historyNoResults');
+   if (noResults) noResults.hidden = visibleCount !== 0;
+ });
+
  $('#attendanceDate')?.addEventListener('change',async e=>{selectedDate=e.target.value;await refresh()});
 
  $('#attendanceSearch')?.addEventListener('input',e=>{const q=e.target.value.trim().toLocaleLowerCase('th');document.querySelectorAll('.attendance-row').forEach(row=>{const name=row.querySelector('.member-name')?.textContent.toLocaleLowerCase('th')||'';row.style.display=name.includes(q)?'':'none'})});
