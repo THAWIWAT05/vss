@@ -35,9 +35,7 @@ const seed = () => ({
     { id: 1, username: process.env.ADMIN_USERNAME || 'admin', passwordHash: bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 10), name: 'ผู้ดูแลระบบ', role: 'admin', memberId: null, active: true }
   ],
   members: [
-    { id: 101, name: 'Shadow', gameId: 'license:shadow', rank: 'หัวหน้าแก๊ง', active: true, joinedAt: today() },
-    { id: 102, name: 'Raven', gameId: 'license:raven', rank: 'รองหัวหน้า', active: true, joinedAt: today() },
-    { id: 103, name: 'Ghost', gameId: 'license:ghost', rank: 'สมาชิก', active: true, joinedAt: today() }
+    { id: 101, name: 'dev', gameId: 'license:shadow', rank: 'developer', active: true, joinedAt: today() }
   ],
   items: [
     { id: 201, name: 'เกราะ', category: 'อุปกรณ์', qty: 20, unit: 'ชิ้น', min: 5 },
