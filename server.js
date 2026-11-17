@@ -251,6 +251,24 @@ app.post('/api/daily-tasks/:id/close', auth, adminOnly, (req,res) => {
   log(db,req.session.user.name,'ปิดวันส่งของ',`${task.date} · ${task.name} · ค้าง ${outstanding.length} คน`);
   writeDB(db);res.json({ok:true,outstanding});
 });
+
+// Admin can delete a daily delivery task only before anyone records a contribution.
+app.delete('/api/daily-tasks/:id', auth, adminOnly, (req,res) => {
+  const db = readDB();
+  const index = db.dailyTasks.findIndex(t => t.id === Number(req.params.id));
+  if (index < 0) return res.status(404).json({ error: 'ไม่พบรายการส่งของ' });
+
+  const task = db.dailyTasks[index];
+  const hasContributions = db.contributions.some(c => c.taskId === task.id);
+  if (hasContributions) {
+    return res.status(400).json({ error: 'รายการนี้มีการบันทึกยอดส่งแล้ว จึงยังลบไม่ได้ เพื่อป้องกันประวัติและยอดคลังคลาดเคลื่อน' });
+  }
+
+  db.dailyTasks.splice(index, 1);
+  log(db, req.session.user.name, 'ลบรายการส่งของประจำวัน', `${task.date} · ${task.name} ${task.qty} ${task.unit}/คน`);
+  writeDB(db);
+  res.json({ ok: true });
+});
 app.post('/api/withdrawals', auth, adminOnly, (req,res) => {
   const itemId=Number(req.body?.itemId),qty=Number(req.body?.qty),reason=String(req.body?.reason||'').trim();
   const db=readDB(),item=db.items.find(i=>i.id===itemId);
