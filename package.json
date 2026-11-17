@@ -1,0 +1,22 @@
+{
+  "name": "gang-control-daily",
+  "version": "4.0.0",
+  "description": "GANG CONTROL DAILY V4 - PostgreSQL persistent database and session store",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0",
+    "pg": "^8.16.3",
+    "connect-pg-simple": "^10.0.0"
+  }
+}
