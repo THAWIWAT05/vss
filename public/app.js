@@ -21,7 +21,7 @@ const GCSound = (()=>{
  }
  function play(kind='tap'){
   if(!settings.enabled)return;
-  const seq={tap:[[520,.055,'sine',.10,0]],start:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.13],[784,.2,'triangle',.18,.26]],tick:[[880,.045,'sine',.10,0]],draw:[[660,.08,'sine',.14,0],[880,.12,'sine',.14,.09]],success:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.12],[784,.12,'triangle',.16,.24],[1047,.28,'triangle',.18,.36]],error:[[330,.13,'sawtooth',.10,0],[247,.2,'sawtooth',.10,.14]],vote:[[440,.07,'sine',.12,0],[587,.1,'sine',.12,.09]],finish:[[784,.13,'triangle',.16,0],[988,.13,'triangle',.16,.14],[1175,.32,'triangle',.18,.28]],join:[[587,.08,'sine',.12,0],[784,.12,'sine',.13,.1]]};
+  const seq={tap:[[520,.055,'sine',.10,0]],start:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.13],[784,.2,'triangle',.18,.26]],tick:[[880,.045,'sine',.10,0]],draw:[[660,.08,'sine',.14,0],[880,.12,'sine',.14,.09]],success:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.12],[784,.12,'triangle',.16,.24],[1047,.28,'triangle',.18,.36]],error:[[330,.13,'sawtooth',.10,0],[247,.2,'sawtooth',.10,.14]],vote:[[440,.07,'sine',.12,0],[587,.1,'sine',.12,.09]],finish:[[784,.13,'triangle',.16,0],[988,.13,'triangle',.16,.14],[1175,.32,'triangle',.18,.28]],join:[[587,.08,'sine',.12,0],[784,.12,'sine',.13,.1]],night:[[220,.32,'sine',.13,0],[196,.42,'sine',.12,.38],[164,.55,'sine',.11,.86]],dawn:[[523,.13,'triangle',.13,0],[659,.13,'triangle',.14,.14],[784,.22,'triangle',.15,.28]],wolf:[[110,.34,'triangle',.18,0],[146,.42,'sawtooth',.13,.3],[98,.55,'triangle',.18,.72]],kill:[[180,.18,'sawtooth',.18,0],[110,.42,'sawtooth',.16,.16],[65,.6,'sine',.18,.5]],protect:[[660,.12,'sine',.13,0],[880,.16,'sine',.14,.13],[1175,.28,'triangle',.15,.3]],seer:[[880,.09,'sine',.12,0],[1175,.12,'sine',.14,.1],[1568,.3,'triangle',.15,.23]],witch:[[392,.12,'triangle',.13,0],[523,.12,'sine',.14,.12],[784,.28,'triangle',.15,.25]],potion:[[330,.1,'sine',.12,0],[494,.12,'triangle',.13,.1],[659,.2,'sine',.14,.22]],poison:[[440,.12,'sawtooth',.13,0],[330,.14,'sawtooth',.15,.12],[196,.35,'sawtooth',.16,.28]],hunter:[[196,.12,'triangle',.13,0],[392,.09,'sawtooth',.14,.12],[130,.32,'triangle',.17,.24]],jester:[[784,.1,'triangle',.13,0],[988,.1,'square',.1,.12],[659,.12,'triangle',.13,.24],[1175,.28,'triangle',.15,.38]],voteResult:[[440,.1,'triangle',.12,0],[349,.12,'triangle',.13,.12],[262,.35,'sine',.15,.27]],death:[[220,.16,'sine',.13,0],[165,.2,'sine',.14,.17],[110,.38,'sine',.16,.38]],winWolf:[[110,.24,'sawtooth',.15,0],[146,.24,'sawtooth',.15,.24],[98,.55,'triangle',.18,.5]],winVillage:[[523,.14,'triangle',.15,0],[659,.14,'triangle',.15,.15],[784,.14,'triangle',.15,.3],[1047,.4,'triangle',.17,.45]]};
   (seq[kind]||seq.tap).forEach(a=>tone(...a));
  }
  function update(patch){settings={...settings,...patch};save();}
@@ -582,7 +582,28 @@ async function loadWerewolf(roomId){
  const before=werewolfState?JSON.stringify(werewolfState):'';
  const next=await api('/api/werewolf'+q);
  const old=werewolfState?.room,now=next?.room;
- if(old&&now&&String(old.id)===String(now.id)&&old.phase!==now.phase){GCSound.play(now.phase==='finished'?'finish':'start');}
+ if(old&&now&&String(old.id)===String(now.id)){
+  if(old.phase!==now.phase){
+   if(now.phase==='night')GCSound.play('night');
+   else if(now.phase==='day')GCSound.play('dawn');
+   else if(now.phase==='vote')GCSound.play('vote');
+   else if(now.phase==='hunter_shot')GCSound.play('hunter');
+   else if(now.phase==='finished')GCSound.play(now.winner==='jester'?'jester':now.winner==='village'?'winVillage':'winWolf');
+  }
+  const oldNight=JSON.stringify(old.lastNight||null),newNight=JSON.stringify(now.lastNight||null);
+  if(newNight!==oldNight&&now.lastNight){
+   if((now.lastNight.killed||[]).length)GCSound.play('kill');
+   else if(now.lastNight.saved)GCSound.play('protect');
+  }
+  const oldVote=JSON.stringify(old.lastVote||null),newVote=JSON.stringify(now.lastVote||null);
+  if(newVote!==oldVote&&now.lastVote){
+   if(now.lastVote.role==='ตัวตลก')GCSound.play('jester');
+   else GCSound.play('voteResult');
+  }
+  if(old.me?.alive!==false&&now.me?.alive===false)GCSound.play('death');
+  if(!old.me?.role&&now.me?.role){const roleSound={wolf:'wolf',seer:'seer',witch:'witch',bodyguard:'protect',guardian:'protect',hunter:'hunter',jester:'jester',villager:'start'};GCSound.play(roleSound[now.me.role]||'start');}
+  if(JSON.stringify(old.me?.seerResult||null)!==JSON.stringify(now.me?.seerResult||null)&&now.me?.seerResult)GCSound.play('seer');
+ }
  werewolfState=next;
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
 }
@@ -630,8 +651,8 @@ function wireWerewolf(){
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`)}catch(e){toast(e.message)}});
  $('#wwExit')?.addEventListener('click',async()=>{try{if(!confirm('ต้องการออกจากเกมนี้ใช่หรือไม่?'))return;await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/leave`,{method:'POST',body:'{}'});localStorage.removeItem('gcWerewolfRoom');await loadWerewolf('')}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'';if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{type,targetId})}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{targetId:b.dataset.wwHunter})}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolf':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.play('hunter');await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
  $('#wwOpenVote')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/open-vote`)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-vote]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันคะแนนโหวตนี้? เปลี่ยนคะแนนไม่ได้'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/vote`,{targetId:b.dataset.wwVote})}catch(e){toast(e.message)}});
  $('#wwRematch')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/rematch`)}catch(e){toast(e.message)}});
