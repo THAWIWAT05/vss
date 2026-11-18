@@ -8,39 +8,90 @@ const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* GANG CONTROL SOUND ENGINE — shared game sound effects (no voice) */
+/* GANG CONTROL SOUND ENGINE — synthesized role/event effects with explicit browser audio unlock */
 const GCSound = (()=>{
- const defaults={enabled:true,volume:0.65};
+ const defaults={enabled:true,volume:0.72};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
- let ctx=null;
+ let ctx=null,unlocked=false;
  const save=()=>{try{localStorage.setItem('gcSoundSettings',JSON.stringify(settings))}catch{}};
- function tone(freq=660,duration=.11,type='sine',gain=.18,delay=0){
-  if(!settings.enabled||settings.volume<=0)return;
-  try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();const osc=ctx.createOscillator(),amp=ctx.createGain(),t=ctx.currentTime+delay;osc.type=type;osc.frequency.setValueAtTime(freq,t);amp.gain.setValueAtTime(.0001,t);amp.gain.exponentialRampToValueAtTime(Math.max(.001,gain*settings.volume),t+.012);amp.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(amp);amp.connect(ctx.destination);osc.start(t);osc.stop(t+duration+.02)}catch{}
+ function getContext(){
+  if(!ctx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;ctx=new AC();}
+  return ctx;
  }
- function play(kind='tap'){
+ async function unlock(){
+  const c=getContext();if(!c)return false;
+  try{if(c.state!=='running')await c.resume();unlocked=c.state==='running';}catch{unlocked=false;}
+  return unlocked;
+ }
+ function tone(c,freq=660,duration=.12,type='sine',gain=.16,delay=0,endFreq=null){
+  const osc=c.createOscillator(),amp=c.createGain(),t=c.currentTime+delay;
+  osc.type=type;osc.frequency.setValueAtTime(Math.max(20,freq),t);
+  if(endFreq)osc.frequency.exponentialRampToValueAtTime(Math.max(20,endFreq),t+duration);
+  amp.gain.setValueAtTime(.0001,t);amp.gain.exponentialRampToValueAtTime(Math.max(.0002,gain*settings.volume),t+.018);amp.gain.exponentialRampToValueAtTime(.0001,t+duration);
+  osc.connect(amp);amp.connect(c.destination);osc.start(t);osc.stop(t+duration+.03);
+ }
+ function noise(c,duration=.22,gain=.12,filter=900,delay=0){
+  const length=Math.max(1,Math.floor(c.sampleRate*duration)),buf=c.createBuffer(1,length,c.sampleRate),data=buf.getChannelData(0);
+  for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(1-i/length);
+  const src=c.createBufferSource(),f=c.createBiquadFilter(),amp=c.createGain(),t=c.currentTime+delay;
+  src.buffer=buf;f.type='lowpass';f.frequency.setValueAtTime(filter,t);amp.gain.setValueAtTime(Math.max(.0001,gain*settings.volume),t);amp.gain.exponentialRampToValueAtTime(.0001,t+duration);
+  src.connect(f);f.connect(amp);amp.connect(c.destination);src.start(t);src.stop(t+duration+.02);
+ }
+ const patterns={
+  tap:c=>tone(c,520,.055,'sine',.08),start:c=>{tone(c,523,.13,'triangle',.15,0);tone(c,659,.13,'triangle',.15,.14);tone(c,784,.22,'triangle',.16,.28)},
+  success:c=>{[523,659,784,1047].forEach((f,i)=>tone(c,f,.17,'triangle',.16,i*.13))},error:c=>{tone(c,330,.16,'sawtooth',.12);tone(c,196,.28,'sawtooth',.12,.16)},
+  vote:c=>{tone(c,440,.09,'sine',.13);tone(c,587,.12,'sine',.13,.1)},
+  finish:c=>{[784,988,1175].forEach((f,i)=>tone(c,f,.2,'triangle',.16,i*.15))},join:c=>{tone(c,587,.09,'sine',.12);tone(c,784,.14,'sine',.13,.1)},
+  night:c=>{tone(c,220,.42,'sine',.14,0,174);tone(c,174,.5,'sine',.13,.42,130);tone(c,130,.62,'triangle',.12,.9,98)},
+  dawn:c=>{[523,659,784,1047].forEach((f,i)=>tone(c,f,.18,'triangle',.15,i*.14))},
+  wolf:c=>{tone(c,180,.45,'triangle',.17,0,370);tone(c,370,.38,'sawtooth',.10,.38,210);tone(c,210,.52,'triangle',.16,.72,125)},
+  wolfAttack:c=>{tone(c,145,.25,'sawtooth',.17,0,80);noise(c,.24,.18,650,.08);tone(c,72,.5,'sine',.19,.22,38)},
+  kill:c=>{noise(c,.34,.2,500);tone(c,105,.42,'sawtooth',.16,.08,48);tone(c,58,.52,'sine',.17,.34,30)},
+  protect:c=>{tone(c,660,.14,'sine',.14);tone(c,880,.16,'sine',.15,.13);tone(c,1175,.3,'triangle',.16,.28);tone(c,1568,.22,'sine',.09,.42)},
+  seer:c=>{tone(c,880,.12,'sine',.13);tone(c,1175,.15,'sine',.15,.12);tone(c,1568,.26,'triangle',.15,.27);tone(c,2093,.18,'sine',.08,.45)},
+  witch:c=>{tone(c,392,.14,'triangle',.13);tone(c,523,.14,'sine',.14,.13);tone(c,784,.25,'triangle',.15,.27);noise(c,.12,.06,1800,.18)},
+  potion:c=>{tone(c,330,.13,'sine',.13);tone(c,494,.15,'triangle',.14,.12);tone(c,659,.23,'sine',.15,.26);[0,.12,.24].forEach(d=>tone(c,900,.05,'sine',.05,d))},
+  poison:c=>{tone(c,440,.15,'sawtooth',.14,0,330);tone(c,330,.18,'sawtooth',.15,.14,190);tone(c,190,.36,'sawtooth',.16,.32,65);noise(c,.25,.09,350,.22)},
+  hunter:c=>{noise(c,.09,.11,1800);tone(c,196,.12,'triangle',.13,.1,392);noise(c,.22,.2,1200,.24);tone(c,130,.34,'triangle',.17,.3,55)},
+  jester:c=>{[784,988,659,1175].forEach((f,i)=>tone(c,f,.13,i===1?'square':'triangle',.14,i*.13));noise(c,.08,.07,2400,.48)},
+  voteResult:c=>{tone(c,440,.12,'triangle',.13);tone(c,349,.15,'triangle',.14,.14);tone(c,262,.38,'sine',.16,.3)},
+  death:c=>{tone(c,220,.2,'sine',.14,0,165);tone(c,165,.23,'sine',.15,.19,110);tone(c,110,.42,'sine',.16,.42,55)},
+  bell:c=>{tone(c,880,.5,'sine',.13,0,860);tone(c,1320,.42,'sine',.08,.04,1280);tone(c,660,.42,'triangle',.07,.28,640)},
+  winWolf:c=>{tone(c,110,.28,'sawtooth',.16,0,146);tone(c,146,.28,'sawtooth',.16,.25,98);tone(c,98,.58,'triangle',.18,.5,65)},
+  winVillage:c=>{[523,659,784,1047,1318].forEach((f,i)=>tone(c,f,.2,'triangle',.16,i*.14))},
+  lose:c=>{tone(c,392,.2,'sine',.13,0,330);tone(c,294,.25,'sine',.14,.2,220);tone(c,165,.55,'triangle',.15,.46,82)}
+ };
+ async function play(kind='tap'){
+  if(!settings.enabled||settings.volume<=0)return;
+  const c=getContext();if(!c)return;
+  await unlock();if(!unlocked)return;
+  (patterns[kind]||patterns.tap)(c);
+ }
+ async function testAll(){
   if(!settings.enabled)return;
-  const seq={tap:[[520,.055,'sine',.10,0]],start:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.13],[784,.2,'triangle',.18,.26]],tick:[[880,.045,'sine',.10,0]],draw:[[660,.08,'sine',.14,0],[880,.12,'sine',.14,.09]],success:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.12],[784,.12,'triangle',.16,.24],[1047,.28,'triangle',.18,.36]],error:[[330,.13,'sawtooth',.10,0],[247,.2,'sawtooth',.10,.14]],vote:[[440,.07,'sine',.12,0],[587,.1,'sine',.12,.09]],finish:[[784,.13,'triangle',.16,0],[988,.13,'triangle',.16,.14],[1175,.32,'triangle',.18,.28]],join:[[587,.08,'sine',.12,0],[784,.12,'sine',.13,.1]],night:[[220,.32,'sine',.13,0],[196,.42,'sine',.12,.38],[164,.55,'sine',.11,.86]],dawn:[[523,.13,'triangle',.13,0],[659,.13,'triangle',.14,.14],[784,.22,'triangle',.15,.28]],wolf:[[110,.34,'triangle',.18,0],[146,.42,'sawtooth',.13,.3],[98,.55,'triangle',.18,.72]],kill:[[180,.18,'sawtooth',.18,0],[110,.42,'sawtooth',.16,.16],[65,.6,'sine',.18,.5]],protect:[[660,.12,'sine',.13,0],[880,.16,'sine',.14,.13],[1175,.28,'triangle',.15,.3]],seer:[[880,.09,'sine',.12,0],[1175,.12,'sine',.14,.1],[1568,.3,'triangle',.15,.23]],witch:[[392,.12,'triangle',.13,0],[523,.12,'sine',.14,.12],[784,.28,'triangle',.15,.25]],potion:[[330,.1,'sine',.12,0],[494,.12,'triangle',.13,.1],[659,.2,'sine',.14,.22]],poison:[[440,.12,'sawtooth',.13,0],[330,.14,'sawtooth',.15,.12],[196,.35,'sawtooth',.16,.28]],hunter:[[196,.12,'triangle',.13,0],[392,.09,'sawtooth',.14,.12],[130,.32,'triangle',.17,.24]],jester:[[784,.1,'triangle',.13,0],[988,.1,'square',.1,.12],[659,.12,'triangle',.13,.24],[1175,.28,'triangle',.15,.38]],voteResult:[[440,.1,'triangle',.12,0],[349,.12,'triangle',.13,.12],[262,.35,'sine',.15,.27]],death:[[220,.16,'sine',.13,0],[165,.2,'sine',.14,.17],[110,.38,'sine',.16,.38]],winWolf:[[110,.24,'sawtooth',.15,0],[146,.24,'sawtooth',.15,.24],[98,.55,'triangle',.18,.5]],winVillage:[[523,.14,'triangle',.15,0],[659,.14,'triangle',.15,.15],[784,.14,'triangle',.15,.3],[1047,.4,'triangle',.17,.45]]};
-  (seq[kind]||seq.tap).forEach(a=>tone(...a));
+  await unlock();
+  for(const kind of ['wolf','wolfAttack','kill','protect','seer','witch','potion','poison','hunter','jester','bell','voteResult','death','winWolf','winVillage','lose']){await play(kind);await new Promise(resolve=>setTimeout(resolve,650));}
  }
  function update(patch){settings={...settings,...patch};save();}
- function get(){return {...settings}}
- return {play,update,get};
+ function get(){return {...settings,unlocked};}
+ return {play,testAll,update,get,unlock};
 })();
 function installGCSoundUI(){
  if(document.getElementById('gcSoundDock'))return;
- const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundPanel select{width:100%;padding:8px;border-radius:8px;background:#1e293b;color:#fff;border:1px solid #475569}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">65%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><small style="color:#94a3b8">ใช้เฉพาะเสียงเอฟเฟกต์ ไม่มีเสียงพูดหรือเสียงสังเคราะห์</small><button id="gcSoundTest">ทดสอบเสียง</button><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
+ const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">72%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><small style="color:#94a3b8">เสียงเอฟเฟกต์แยกตามบทบาทและเหตุการณ์</small><button id="gcSoundTest">▶ ทดสอบเสียงทุกบทบาท</button><small id="gcSoundHint" style="color:#fbbf24">หากยังไม่มีเสียง ให้แตะปุ่มทดสอบเสียงหนึ่งครั้ง</small><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
  document.body.appendChild(dock);
- const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇'};
- $s('gcSoundToggle').onclick=()=>{$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
- $s('gcSoundEnabled').onchange=e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked)GCSound.play('start')};
+ const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇';};
+ $s('gcSoundToggle').onclick=async()=>{await GCSound.unlock();$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
+ $s('gcSoundEnabled').onchange=async e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked){await GCSound.unlock();GCSound.play('start')}};
  $s('gcSoundVolume').oninput=e=>{const volume=Number(e.target.value)/100;GCSound.update({volume});$s('gcSoundValue').textContent=e.target.value+'%'};
- $s('gcSoundTest').onclick=()=>GCSound.play('success');
+ $s('gcSoundTest').onclick=async()=>{await GCSound.unlock();$s('gcSoundHint').textContent='กำลังเล่นตัวอย่างเสียงแต่ละบทบาท…';await GCSound.testAll();$s('gcSoundHint').textContent='ทดสอบครบแล้ว หากไม่ได้ยินให้ตรวจระดับเสียงและแท็บเบราว์เซอร์';};
+ // Browser audio policies require a user gesture. Unlock on the first real interaction.
+ const unlockOnce=()=>{GCSound.unlock();document.removeEventListener('pointerdown',unlockOnce,true);document.removeEventListener('keydown',unlockOnce,true);};
+ document.addEventListener('pointerdown',unlockOnce,true);document.addEventListener('keydown',unlockOnce,true);
  document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!b.closest('#gcSoundDock'))GCSound.play('tap')},true);
  sync();
 }
-
 
 function installImpostorStyles(){if($('#impostorStyles'))return;const st=document.createElement('style');st.id='impostorStyles';st.textContent=`
 .im-shell{--im-bg:#0b1018;--im-panel:#121c29;--im-line:#25364a;background:radial-gradient(circle at 85% 0%,#233a55 0,#101a28 35%,#0a111b 75%);color:#eaf1f8;border:1px solid #29394c;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px #02081266}.im-hero{padding:27px 30px;background:linear-gradient(110deg,#101a28,#192b40 58%,#33243a);border-bottom:1px solid #34465b;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.im-kicker{font-size:10px;letter-spacing:3px;color:#8eb6d7;font-weight:900}.im-hero h2{font-size:clamp(34px,5vw,54px);letter-spacing:2px;margin:6px 0;color:#fff;font-weight:1000}.im-hero p{color:#b7c6d6;margin:0}.im-pill{padding:8px 12px;border:1px solid #52677e;background:#ffffff0d;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:1px}.im-body{padding:20px;display:grid;gap:16px}.im-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.im-panel{background:linear-gradient(145deg,#162333,#111b28);border:1px solid #2b3c50;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081233}.im-panel h3{margin:0 0 7px;color:#f1f6fb}.im-muted{font-size:12px;color:#9cafc1}.im-btn{border:1px solid #7193b2;background:linear-gradient(110deg,#477da7,#315c80);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.im-btn:disabled{opacity:.4;cursor:not-allowed}.im-btn.ghost{background:#172638;border-color:#40556b}.im-btn.red{background:linear-gradient(110deg,#b94b55,#87313c);border-color:#d16a72}.im-field{display:grid;gap:6px}.im-field label{font-size:11px;color:#9fb4c9;font-weight:800}.im-field input,.im-field select,.im-field textarea{width:100%;border:1px solid #40546b;background:#0d1723;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.im-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.im-code{font:900 20px ui-monospace,monospace;letter-spacing:4px;color:#9ed1f5}.im-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.im-player{padding:11px 12px;border:1px solid #31465b;border-radius:10px;background:#0e1926;font-size:13px}.im-player small{display:block;color:#8da4ba;margin-top:3px}.im-secret{padding:20px;border:1px solid #8a6c40;border-radius:14px;background:linear-gradient(130deg,#352c1c,#1e2530);text-align:center}.im-secret .word{font-size:clamp(26px,4vw,40px);font-weight:1000;color:#ffe2a6;letter-spacing:1px}.im-secret.im-bad{border-color:#9c4653;background:linear-gradient(130deg,#3a1e29,#1e2530)}.im-clues{display:grid;gap:8px}.im-clue{display:flex;gap:10px;padding:10px;border-radius:9px;background:#0d1824;border:1px solid #283b50}.im-clue b{color:#a9c9e4;min-width:100px}.im-vote{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px;border:1px solid #34485d;background:#0d1824;border-radius:10px}.im-rule{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;margin:10px 0}.im-rule span{width:28px;height:28px;border-radius:8px;background:#29445e;display:grid;place-items:center;font-weight:900;color:#b9dcf5}.im-result{text-align:center;padding:24px;border:1px solid #526b83;border-radius:14px;background:linear-gradient(135deg,#1d3044,#172130)}.im-result h2{font-size:30px;margin:6px 0}.im-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #2b3e52;border-radius:12px;background:#0e1926}.im-toast-note{padding:10px 12px;border-radius:10px;background:#1b3044;color:#c5dff3;font-size:12px}
@@ -584,16 +635,20 @@ async function loadWerewolf(roomId){
  const old=werewolfState?.room,now=next?.room;
  if(old&&now&&String(old.id)===String(now.id)){
   if(old.phase!==now.phase){
-   if(now.phase==='night')GCSound.play('night');
-   else if(now.phase==='day')GCSound.play('dawn');
+   if(now.phase==='night'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
+   else if(now.phase==='day')GCSound.play('bell');
    else if(now.phase==='vote')GCSound.play('vote');
    else if(now.phase==='hunter_shot')GCSound.play('hunter');
-   else if(now.phase==='finished')GCSound.play(now.winner==='jester'?'jester':now.winner==='village'?'winVillage':'winWolf');
+   else if(now.phase==='finished'){
+    const role=now.me?.role;
+    const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?role==='wolf':now.winner==='village'?role!=='wolf'&&role!=='jester':false;
+    GCSound.play(now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose');
+   }
   }
   const oldNight=JSON.stringify(old.lastNight||null),newNight=JSON.stringify(now.lastNight||null);
   if(newNight!==oldNight&&now.lastNight){
    if((now.lastNight.killed||[]).length)GCSound.play('kill');
-   else if(now.lastNight.saved)GCSound.play('protect');
+   if(now.lastNight.saved||now.lastNight.bodyguardSacrifice)GCSound.play('protect');
   }
   const oldVote=JSON.stringify(old.lastVote||null),newVote=JSON.stringify(now.lastVote||null);
   if(newVote!==oldVote&&now.lastVote){
@@ -651,7 +706,7 @@ function wireWerewolf(){
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`)}catch(e){toast(e.message)}});
  $('#wwExit')?.addEventListener('click',async()=>{try{if(!confirm('ต้องการออกจากเกมนี้ใช่หรือไม่?'))return;await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/leave`,{method:'POST',body:'{}'});localStorage.removeItem('gcWerewolfRoom');await loadWerewolf('')}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolf':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.play('hunter');await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
  $('#wwOpenVote')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/open-vote`)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-vote]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันคะแนนโหวตนี้? เปลี่ยนคะแนนไม่ได้'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/vote`,{targetId:b.dataset.wwVote})}catch(e){toast(e.message)}});
