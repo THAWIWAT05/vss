@@ -134,22 +134,35 @@ function renderSavedTeams(){
  if(!savedWheelTeams){target.innerHTML='';return}
  const teams=savedWheelTeams.teams||[],remaining=wheelNames();
  const complete=remaining.length===0;
+ const manual=savedWheelTeams.pickMode==='manual';
+ const nextIndex=Number(savedWheelTeams.nextTeamIndex||0)%Math.max(1,teams.length);
  target.innerHTML=`
-  <div class="wheel-pool-note"><b>วงล้อคงเหลือ ${remaining.length} คน</b><div class="wheel-team-status">รายชื่อที่เป็นหัวหน้าทีมหรือถูกจัดเข้าทีมแล้ว จะถูกนำออกจากวงล้ออัตโนมัติ</div></div>
+  <div class="wheel-pool-note"><b>วงล้อคงเหลือ ${remaining.length} คน</b><div class="wheel-team-status">รายชื่อที่เป็นหัวหน้าทีมหรือถูกจัดเข้าทีมแล้ว จะถูกนำออกจากวงล้ออัตโนมัติ</div>
+  ${manual&&!complete?`<div class="wheel-team-status"><b>โหมดสุ่มทีละคน:</b> คนถัดไปจะเข้า ทีม ${nextIndex+1} · กดปุ่มหมุนวงล้อด้านซ้ายเพื่อสุ่มและจัดเข้าทีม</div>`:''}</div>
   <div class="wheel-team-grid">${teams.map((team,i)=>`<div class="wheel-team">
    <h4><span>🛡️ ทีม ${i+1}</span><span class="muted-note">${team.members.length} คน</span></h4>
    <p class="team-leader">👑 หัวหน้าทีม: ${esc(team.leader)}</p>
    ${team.members.filter(n=>n!==team.leader).map(name=>`<p class="team-member">${esc(name)}</p>`).join('')||'<p class="muted-note">รอสุ่มสมาชิกเพิ่ม</p>'}
-   <div class="wheel-team-actions"><button type="button" class="btn small" data-add-one-team="${i}" ${remaining.length?'':'disabled'}>🎲 สุ่มเข้าทีมนี้ 1 คน</button></div>
   </div>`).join('')}</div>
   <div class="toolbar" style="margin-top:12px">
-   <button type="button" class="btn primary" id="wheelRandomAll" ${remaining.length?'':'disabled'}>🎲 สุ่มสมาชิกที่เหลือเข้าทุกทีม</button>
+   ${!manual?`<button type="button" class="btn primary" id="wheelRandomAll" ${remaining.length?'':'disabled'}>🎲 สุ่มสมาชิกที่เหลือเข้าทุกทีม</button>`:''}
    <button type="button" class="btn small" id="wheelEditLeaders">✎ เปลี่ยนหัวหน้าทีม</button>
   </div>
-  ${complete?'<p class="muted-note">จัดสมาชิกครบทุกคนแล้ว</p>':''}`;
+  ${complete?'<p class="muted-note">จัดสมาชิกครบทุกคนแล้ว</p>':manual?'<p class="muted-note">หมุนวงล้อทางด้านซ้ายเพื่อจัดสมาชิกเข้าทีมทีละคน โดยระบบจะเลื่อนไปทีมถัดไปให้อัตโนมัติ</p>':''}`;
  $('#wheelEditLeaders')?.addEventListener('click',()=>openLeaderPicker(teams.map(t=>({...t,members:[...t.members]})),[...new Set(teams.flatMap(t=>t.members||[]))]));
  $('#wheelRandomAll')?.addEventListener('click',randomizeAllTeams);
- target.querySelectorAll('[data-add-one-team]').forEach(btn=>btn.addEventListener('click',()=>randomizeOneToTeam(Number(btn.dataset.addOneTeam))));
+}
+function chooseTeamMode(isNewSetup=true){
+ const root=$('#modalRoot');if(!root)return;
+ root.innerHTML=`<div class="wheel-modal-back"><div class="wheel-leader-modal"><div style="font-size:34px">🎲</div><h2>เลือกวิธีจัดสมาชิกเข้าทีม</h2><p class="muted-note">กำหนดหัวหน้าทีมเรียบร้อยแล้ว ต้องการจัดสมาชิกที่เหลือแบบไหน?</p><div class="panel" style="margin:12px 0"><h3>⚡ สุ่มอัตโนมัติ</h3><p class="muted-note">ระบบจะสุ่มรายชื่อที่เหลือและกระจายเข้าทุกทีมให้ครบในครั้งเดียว</p><button type="button" class="btn primary" id="chooseAutoTeams">สุ่มสมาชิกทั้งหมดอัตโนมัติ</button></div><div class="panel" style="margin:12px 0"><h3>🎡 สุ่มด้วยวงล้อทีละคน</h3><p class="muted-note">กดหมุนวงล้อ 1 ครั้ง จะสุ่มได้ 1 คนและจัดเข้าทีมถัดไปอัตโนมัติ วนไปเรื่อย ๆ จนรายชื่อหมด</p><button type="button" class="btn primary" id="chooseManualTeams">ใช้วงล้อสุ่มทีละคน</button></div></div></div>`;
+ $('#chooseAutoTeams').onclick=()=>{savedWheelTeams.pickMode='auto';savedWheelTeams.nextTeamIndex=0;persistWheelTeams();root.innerHTML='';randomizeAllTeams()};
+ $('#chooseManualTeams').onclick=()=>{savedWheelTeams.pickMode='manual';savedWheelTeams.nextTeamIndex=0;persistWheelTeams();root.innerHTML='';syncWheelPool();renderSavedTeams();const result=$('#wheelResult');if(result)result.textContent='เลือกโหมดวงล้อแล้ว กด “หมุนวงล้อสุ่ม 1 คน” เพื่อเริ่มจัดทีม';updateWheelSpinButton()};
+}
+function updateWheelSpinButton(){
+ const btn=$('#spinWheel');if(!btn)return;
+ const manual=savedWheelTeams?.pickMode==='manual'&&!!savedWheelTeams?.teams?.length;
+ btn.textContent=manual?'🎡 หมุนวงล้อสุ่ม 1 คน → เข้าทีมถัดไป':'🎡 หมุนวงล้อสุ่ม 1 คน';
+ btn.disabled=wheelBusy||wheelNames().length===0;
 }
 function openLeaderPicker(teams, allNames=wheelNames()){
  const root=$('#modalRoot');if(!root)return;
@@ -159,11 +172,7 @@ function openLeaderPicker(teams, allNames=wheelNames()){
  const form=root.querySelector('form');
  const syncOptions=()=>{
   const selects=[...form.querySelectorAll('select[data-leader-index]')],chosen=selects.map(x=>x.value);
-  selects.forEach((sel,i)=>{
-   const keep=sel.value;
-   sel.innerHTML=names.filter(n=>!chosen.some((v,j)=>j!==i&&v===n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-   if(names.includes(keep)&&!chosen.some((v,j)=>j!==i&&v===keep))sel.value=keep;
-  });
+  selects.forEach((sel,i)=>{const keep=sel.value;sel.innerHTML=names.filter(n=>!chosen.some((v,j)=>j!==i&&v===n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');if(names.includes(keep)&&!chosen.some((v,j)=>j!==i&&v===keep))sel.value=keep;});
  };
  form.querySelectorAll('select').forEach(sel=>sel.addEventListener('change',syncOptions));syncOptions();
  $('#cancelLeaderPick').onclick=()=>root.innerHTML='';
@@ -172,19 +181,17 @@ function openLeaderPicker(teams, allNames=wheelNames()){
   e.preventDefault();
   const data=new FormData(form),leaders=teams.map((team,i)=>String(data.get(`leader${i}`)||''));
   if(leaders.some(x=>!x)||new Set(leaders).size!==leaders.length){toast('หัวหน้าทีมแต่ละทีมต้องไม่ซ้ำกัน');return}
-  const oldTeams=savedWheelTeams?.teams||[];
+  const oldTeams=savedWheelTeams?.teams||[],hadExisting=oldTeams.length===teams.length;
   let nextTeams=teams.map((team,i)=>({leader:leaders[i],members:[leaders[i]]}));
   let freed=[];
-  if(oldTeams.length===teams.length){
-   nextTeams=teams.map((team,i)=>{
-    const old=oldTeams[i]||{members:[]};
-    return {leader:leaders[i],members:[...new Set([leaders[i],...(old.members||[]).filter(n=>n!==old.leader&&n!==leaders[i])])]};
-   });
+  if(hadExisting){
+   nextTeams=teams.map((team,i)=>{const old=oldTeams[i]||{members:[]};return {leader:leaders[i],members:[...new Set([leaders[i],...(old.members||[]).filter(n=>n!==old.leader&&n!==leaders[i])])]};});
    freed=oldTeams.map(t=>t.leader).filter(n=>!leaders.includes(n)&&!nextTeams.some(t=>t.members.includes(n)));
   }
-  savedWheelTeams={teams:nextTeams,createdAt:new Date().toISOString()};
+  savedWheelTeams={teams:nextTeams,createdAt:new Date().toISOString(),pickMode:hadExisting?(savedWheelTeams.pickMode||'auto'):null,nextTeamIndex:hadExisting?(savedWheelTeams.nextTeamIndex||0):0};
   if(freed.length)saveWheelNames([...wheelNames(),...freed]);
-  persistWheelTeams();syncWheelPool();root.innerHTML='';renderSavedTeams();toast('บันทึกหัวหน้าทีมแล้ว เลือกวิธีสุ่มสมาชิกได้เลย');
+  persistWheelTeams();syncWheelPool();root.innerHTML='';renderSavedTeams();
+  if(!hadExisting)chooseTeamMode(true);else{updateWheelSpinButton();toast('บันทึกหัวหน้าทีมแล้ว')}
  };
 }
 function randomizeAllTeams(){
@@ -193,7 +200,7 @@ function randomizeAllTeams(){
  const shuffled=[...remaining];
  for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}
  shuffled.forEach((name,i)=>savedWheelTeams.teams[i%savedWheelTeams.teams.length].members.push(name));
- persistWheelTeams();syncWheelPool();renderSavedTeams();toast(`สุ่มสมาชิก ${remaining.length} คนเข้าทีมเรียบร้อย`);
+ savedWheelTeams.pickMode='auto';persistWheelTeams();syncWheelPool();renderSavedTeams();updateWheelSpinButton();toast(`สุ่มสมาชิก ${remaining.length} คนเข้าทีมเรียบร้อย`);
 }
 function randomizeOneToTeam(index){
  const teams=savedWheelTeams?.teams||[],remaining=wheelNames(),team=teams[index];
@@ -214,7 +221,7 @@ function wheel(){
 }
 function bindWheel(){
  if(savedWheelTeams?.teams?.length)syncWheelPool();
- const names=wheelNames();saveWheelNames(names);drawWheel(names,true);renderSavedTeams();
+ const names=wheelNames();saveWheelNames(names);drawWheel(names,true);renderSavedTeams();updateWheelSpinButton();
  $('#wheelNamesInput')?.addEventListener('input',()=>{
   const a=wheelNames();saveWheelNames(a);drawWheel(a,true);
   $('#wheelResult').textContent='รายชื่อเปลี่ยนแล้ว พร้อมสุ่ม';
@@ -239,7 +246,19 @@ function bindWheel(){
   const canvas=$('#wheelCanvas');wheelBusy=true;$('#spinWheel').disabled=true;$('#wheelResult').textContent='🎡 กำลังหมุน...';
   canvas.style.transition='none';canvas.style.transform='rotate(0deg)';void canvas.offsetWidth;
   const extra=360*6+(360-center);canvas.style.transition='transform 4.2s cubic-bezier(.12,.72,.12,1)';canvas.style.transform=`rotate(${extra}deg)`;wheelRotation=extra;
-  setTimeout(()=>{wheelBusy=false;$('#spinWheel').disabled=false;showWheelWinner(list[chosen])},4300);
+  setTimeout(()=>{
+   const winner=list[chosen],manual=savedWheelTeams?.pickMode==='manual',teams=savedWheelTeams?.teams||[];
+   wheelBusy=false;
+   if(manual&&teams.length){
+    if(!wheelNames().includes(winner)){if($('#spinWheel'))$('#spinWheel').disabled=false;return}
+    const teamIndex=Number(savedWheelTeams.nextTeamIndex||0)%teams.length;
+    teams[teamIndex].members.push(winner);
+    savedWheelTeams.nextTeamIndex=(teamIndex+1)%teams.length;
+    persistWheelTeams();syncWheelPool();showWheelWinner(`${winner} → ทีม ${teamIndex+1}`);renderSavedTeams();
+    if(!wheelNames().length){const result=$('#wheelResult');if(result)result.innerHTML+=`<br><span class="muted-note">จัดสมาชิกครบทุกทีมแล้ว</span>`}
+   }else{showWheelWinner(winner)}
+   updateWheelSpinButton();if($('#spinWheel'))$('#spinWheel').disabled=!wheelNames().length;
+  },4300);
  });
  $('#wheelMakeTeams')?.addEventListener('click',()=>{
   const list=wheelNames(),count=Number($('#wheelTeamCount').value);
