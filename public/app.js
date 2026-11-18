@@ -59,6 +59,11 @@ function installWheelStyles(){if($('#wheelStyles'))return;const st=document.crea
 .bingo-live-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.bingo-stat-card{border-top:2px solid #0b6857;padding:10px 4px 8px}.bingo-stat-label{font-size:11px;color:#6b837a;font-weight:800}.bingo-stat-value{font-size:clamp(24px,3vw,36px);font-weight:1000;color:#0a6554;line-height:1.2}.bingo-current-ball{width:78px;height:78px;border:4px solid #d8e8e0;background:radial-gradient(circle at 30% 25%,#fff,#e5f2ec 62%,#a9cbbb);color:#075344;font-size:30px;box-shadow:0 4px 12px #153e3020}.bingo-call-box{border-radius:3px;background:#f4f8f5;color:#16493e;border:1px solid #cbdcd3;padding:13px}.bingo-call-box small{color:#6b837a}.bingo-history-balls{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.bingo-history-ball{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e8f0ec;color:#49685d;font-size:12px;font-weight:900;border:1px solid #cbdad2}.bingo-history-ball:first-child{background:#0b6857;color:#fff;border-color:#0b6857;box-shadow:0 0 0 2px #b7d5c8}.bingo-number-grid{grid-template-columns:repeat(15,minmax(0,1fr));gap:3px}.bingo-number{border-radius:2px}.bingo-action{border-radius:3px}.bingo-create{border-radius:3px}.bingo-players{gap:5px}.bingo-player-chip{border-radius:3px;background:#eef4f0;border:1px solid #d5e2db}.bingo-winner{border-radius:3px}.bingo-join{border-radius:3px}.bingo-empty{padding:28px 18px}
 @media(max-width:800px){.bingo-main{grid-template-columns:1fr}.bingo-eventbar{margin:10px 10px 0}.bingo-event-meta{text-align:left}}
 @media(max-width:480px){.bingo-banner{padding:16px}.bingo-main{padding:10px}.bingo-card-panel,.bingo-side-panel{padding:10px}.bingo-eventbar{padding:13px}.bingo-square{font-size:16px}.bingo-history-ball{width:30px;height:30px}}
+/* BINGO V8: instant marking and lightweight rendering */
+.bingo-square{transition:none!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}
+.bingo-square.marked{will-change:border-color;border:3px solid #d62929!important;border-radius:50%!important;background:#fff!important;color:#17483e!important;box-shadow:none!important}
+.bingo-number,.bingo-number.hit,.bingo-number.latest{background:#edf3f0!important;color:#799087!important;box-shadow:none!important}
+.bingo-number{transition:none!important}
 .bingo-countdown-wrap{display:flex;align-items:center;justify-content:center;gap:12px;margin:12px auto 6px}
 .bingo-countdown-ring{--progress:0deg;width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#d4a52c var(--progress),#dce8e1 0);position:relative;flex:0 0 auto}
 .bingo-countdown-ring:before{content:"";position:absolute;inset:5px;background:#f4f8f5;border-radius:50%}
@@ -463,7 +468,18 @@ function updateBingoCountdown(){
  if(value)value.textContent=label;
  if(ring)ring.style.setProperty('--progress',`${((5-left)/5*360)}deg`);
 }
-async function loadBingo(roomId){const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';const previous=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);bingoState=await api('/api/bingo'+q);const current=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);const sig=current.map(w=>String(w.userId)).sort().join('|');const prevSig=previous.map(w=>String(w.userId)).sort().join('|');if(bingoHasLoadedOnce&&sig&&sig!==prevSig&&bingoState?.room?.status==='finished')showBingoWinnerPopup(current);bingoHasLoadedOnce=true;if(page==='bingo')render()}
+async function loadBingo(roomId){
+ const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
+ const before=bingoState?JSON.stringify(bingoState):'';
+ const previous=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
+ const next=await api('/api/bingo'+q);bingoState=next;
+ const current=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
+ const sig=current.map(w=>String(w.userId)).sort().join('|');
+ const prevSig=previous.map(w=>String(w.userId)).sort().join('|');
+ if(bingoHasLoadedOnce&&sig&&sig!==prevSig&&bingoState?.room?.status==='finished')showBingoWinnerPopup(current);
+ bingoHasLoadedOnce=true;
+ if(page==='bingo'&&before!==JSON.stringify(next))render();
+}
 async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.stringify(body)});await loadBingo(bingoState?.room?.id)}
 
 function wire(){
@@ -474,7 +490,23 @@ function wire(){
   $('#bingoBack')?.addEventListener('click',async()=>{await loadBingo()});
   $('#bingoLeave')?.addEventListener('click',async()=>{if(!confirm('ต้องการออกจากห้องนี้ใช่หรือไม่?'))return;try{await api(`/api/bingo/${encodeURIComponent(bingoState.room.id)}/leave`,{method:'POST',body:'{}'});await loadBingo();toast('ออกจากห้องแล้ว')}catch(e){toast(e.message)}});
   $('#bingoStart')?.addEventListener('click',async()=>{if(!confirm('เริ่มเกมนี้เลยหรือไม่? ระบบจะสุ่มเลขทุก 5 วินาที'))return;try{await api(`/api/bingo/${encodeURIComponent(bingoState.room.id)}/start`,{method:'POST',body:'{}'});await loadBingo(bingoState.room.id);toast('เริ่มเกมแล้ว')}catch(e){toast(e.message)}});
-  document.querySelectorAll('[data-bingo-cell]').forEach(b=>b.addEventListener('click',async()=>{const index=Number(b.dataset.bingoCell),roomId=bingoState?.room?.id;if(!roomId||b.disabled)return;b.disabled=true;b.classList.add('marked');const count=b.closest('.bingo-card-panel')?.querySelector('.bingo-panel-head b');if(count){const n=Number((count.textContent||'0/25').split('/')[0])+1;count.textContent=`${n}/25`;}if(bingoState?.room?.player?.marked)bingoState.room.player.marked[index]=true;try{const out=await api(`/api/bingo/${encodeURIComponent(roomId)}/mark`,{method:'POST',body:JSON.stringify({index})});if(out.winners?.length)await loadBingo(roomId)}catch(e){await loadBingo(roomId);toast(e.message)}}));
+  document.querySelectorAll('[data-bingo-cell]').forEach(b=>b.addEventListener('click',async()=>{
+   const index=Number(b.dataset.bingoCell),roomId=bingoState?.room?.id,player=bingoState?.room?.player;
+   if(!roomId||b.disabled||!player||player.marked?.[index])return;
+   // Paint the red ring synchronously before making the network request.
+   b.classList.add('marked');b.disabled=true;
+   if(player.marked)player.marked[index]=true;
+   const count=b.closest('.bingo-card-panel')?.querySelector('.bingo-panel-head b');
+   if(count){const n=Number((count.textContent||'0/25').split('/')[0])+1;count.textContent=`${n}/25`;}
+   try{
+    const out=await api(`/api/bingo/${encodeURIComponent(roomId)}/mark`,{method:'POST',body:JSON.stringify({index})});
+    if(out.winners?.length)await loadBingo(roomId);
+   }catch(e){
+    b.classList.remove('marked');b.disabled=false;if(player.marked)player.marked[index]=false;
+    if(count){const n=Math.max(1,Number((count.textContent||'1/25').split('/')[0])-1);count.textContent=`${n}/25`;}
+    toast(e.message);
+   }
+  }));
  }
  if(page==='wheel')bindWheel();
  $('#applyAuditFilter')?.addEventListener('click',()=>{const from=$('#auditFrom').value,to=$('#auditTo').value,q=$('#auditQuery').value.trim();if(from&&to&&from>to){toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');return}loadAudit(from,to,q).catch(e=>toast(e.message))});
@@ -590,5 +622,18 @@ function wire(){
 }
 
 setInterval(()=>{if(state)refresh().catch(()=>{})},45000);
-setInterval(async()=>{if(!state||page!=='bingo')return;try{const roomId=bingoState?.room?.id;if(roomId&&bingoState?.room?.status==='playing'){await api(`/api/bingo/${encodeURIComponent(roomId)}/tick`,{method:'POST',body:'{}'});updateBingoCountdown();bingoPollCounter++;if(bingoPollCounter%5===0)await loadBingo(roomId)}else{bingoPollCounter=0;await loadBingo(roomId)}}catch(e){}},1000);
+let bingoTickInFlight=false,bingoLastSync=0;
+setInterval(async()=>{
+ if(!state||page!=='bingo')return;
+ const roomId=bingoState?.room?.id,room=bingoState?.room;
+ updateBingoCountdown();
+ const now=Date.now();
+ if(roomId&&room?.status==='playing'&&now>=(room.nextDrawAt||0)&&!bingoTickInFlight){
+  bingoTickInFlight=true;
+  try{const out=await api(`/api/bingo/${encodeURIComponent(roomId)}/tick`,{method:'POST',body:'{}'});if(out.drawn||out.finished)await loadBingo(roomId);}
+  catch(e){}finally{bingoTickInFlight=false;}
+ }
+ // Read-only sync keeps other players current without rebuilding an unchanged screen.
+ if(now-bingoLastSync>=1500){bingoLastSync=now;try{await loadBingo(roomId)}catch(e){}}
+},250);
 boot().catch(()=>{});
