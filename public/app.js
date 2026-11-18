@@ -33,22 +33,22 @@ function installWheelStyles(){if($('#wheelStyles'))return;const st=document.crea
 .wheel-spin-btn{min-width:220px;padding:13px 25px!important;border-radius:999px!important;font-weight:800!important;font-size:16px!important;box-shadow:0 8px 20px rgba(99,102,241,.25)}
 .wheel-controls{display:grid;gap:16px}.wheel-controls h3{margin-bottom:6px}.wheel-result{padding:16px 18px;border:1px solid var(--line,#ddd);border-radius:16px;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(236,72,153,.07));min-height:78px;text-align:center}.wheel-result strong{font-size:24px;color:var(--text,#1e293b)}.wheel-names{width:100%;min-height:155px;resize:vertical;border-radius:14px;padding:12px;line-height:1.7}
 .wheel-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.wheel-team{border:1px solid var(--line,#ddd);border-radius:16px;padding:14px;background:var(--panel,#fff);box-shadow:0 5px 16px rgba(15,23,42,.05)}.wheel-team h4{margin:0 0 10px;display:flex;align-items:center;justify-content:space-between}.wheel-team .team-leader{padding:8px 10px;border-radius:10px;background:linear-gradient(100deg,rgba(245,158,11,.17),rgba(251,191,36,.08));font-weight:800;margin:0 0 8px}.wheel-team .team-member{padding:5px 2px;margin:0;border-bottom:1px dashed var(--line,#e2e8f0)}.wheel-team .team-member:last-child{border:0}
-.wheel-modal-back{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);backdrop-filter:blur(7px);display:grid;place-items:center;padding:20px;animation:wheelFade .2s ease}.wheel-winner-modal{position:relative;width:min(440px,100%);padding:34px 26px 26px;text-align:center;border-radius:26px;background:linear-gradient(145deg,#fff,#f5f3ff);color:#1e1b4b;box-shadow:0 25px 80px rgba(0,0,0,.35);animation:wheelPop .35s cubic-bezier(.2,.9,.3,1.2)}.wheel-winner-icon{font-size:56px;line-height:1.2}.wheel-winner-modal h2{font-size:25px;margin:12px 0 6px;color:#6d28d9}.wheel-winner-name{font-size:clamp(25px,6vw,36px);font-weight:900;overflow-wrap:anywhere;margin:16px 0;padding:14px;border-radius:16px;background:linear-gradient(100deg,#ede9fe,#fce7f3)}.wheel-winner-modal button{min-width:130px;border-radius:999px!important}@keyframes wheelFade{from{opacity:0}to{opacity:1}}@keyframes wheelPop{from{opacity:0;transform:translateY(18px) scale(.86)}to{opacity:1;transform:translateY(0) scale(1)}}
+.wheel-modal-back{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.68);display:grid;place-items:center;padding:16px}
 
-/* Center-screen feedback popups */
-.gc-notice-back{position:fixed;inset:0;z-index:12000;display:grid;place-items:center;padding:18px;background:rgba(15,23,42,.48);backdrop-filter:blur(5px);animation:wheelFade .16s ease}
-.gc-notice{width:min(420px,100%);padding:25px 24px 20px;border-radius:22px;background:var(--panel,#fff);color:var(--text,#172033);box-shadow:0 24px 70px #0004;text-align:center;border:1px solid var(--line,#e2e8f0);animation:wheelPop .25s ease}
-.gc-notice-icon{font-size:38px;margin-bottom:8px}.gc-notice-message{font-size:16px;font-weight:700;line-height:1.55;overflow-wrap:anywhere}.gc-notice button{margin-top:18px;min-width:120px;border-radius:999px!important}
-.wheel-leader-modal{width:min(560px,100%);max-height:min(82vh,760px);overflow:auto;padding:24px;border-radius:24px;background:var(--panel,#fff);color:var(--text,#172033);box-shadow:0 25px 80px #0005;animation:wheelPop .3s ease}
+.gc-toast-visible{position:fixed;top:18px;right:18px;z-index:15000;max-width:min(420px,calc(100vw - 36px));padding:12px 17px;border-radius:12px;background:#172033;color:#fff;box-shadow:0 8px 24px #0003;font-size:14px;font-weight:700;line-height:1.45;pointer-events:none;opacity:1;transition:opacity .15s ease}.gc-toast-visible:empty{display:none}
+.wheel-modal-back{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.68);display:grid;place-items:center;padding:16px}.wheel-modal-back .wheel-leader-modal{position:relative;z-index:1}
+.wheel-leader-modal{width:min(560px,100%);max-height:min(82vh,760px);overflow:auto;padding:24px;border-radius:24px;background:var(--panel,#fff);color:var(--text,#172033);box-shadow:0 25px 80px #0005}
 .wheel-leader-modal h2{margin:0 0 6px}.wheel-leader-row{display:grid;grid-template-columns:95px 1fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#e2e8f0)}.wheel-leader-row label{font-weight:800}.wheel-leader-row select{width:100%;min-width:0;padding:10px;border:1px solid var(--line,#cbd5e1);border-radius:11px;background:var(--panel,#fff);color:var(--text,inherit)}.wheel-leader-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media(max-width:760px){.wheel-layout{grid-template-columns:1fr}.wheel-team-grid{grid-template-columns:1fr 1fr}.wheel-stage{width:min(100%,460px)}}@media(max-width:430px){.wheel-team-grid{grid-template-columns:1fr}.wheel-stage{padding:7px}}
 `;document.head.appendChild(st)}
 
 async function api(url, options={}) { const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'ดำเนินการไม่สำเร็จ'); return d; }
+let toastTimer=null;
 function toast(msg){
- const root=$('#modalRoot');if(!root)return;
- root.innerHTML=`<div class="gc-notice-back"><div class="gc-notice" role="alertdialog" aria-modal="true"><div class="gc-notice-icon">✦</div><div class="gc-notice-message">${esc(msg)}</div><button type="button" class="btn primary" id="gcNoticeOk">ตกลง</button></div></div>`;
- const close=()=>{root.innerHTML=''};$('#gcNoticeOk').onclick=close;root.querySelector('.gc-notice-back').onclick=e=>{if(e.target.classList.contains('gc-notice-back'))close()};
+ let node=$('#gcToast');
+ if(!node){node=document.createElement('div');node.id='gcToast';node.setAttribute('role','status');document.body.appendChild(node)}
+ node.textContent=String(msg||'');node.className='gc-toast-visible';
+ clearTimeout(toastTimer);toastTimer=setTimeout(()=>{node.className='';},2600);
 }
 function isAdmin(){return !!state?.isAdmin}
 
@@ -97,24 +97,42 @@ function drawWheel(names){
  ctx.beginPath();ctx.arc(cx,cy,43,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#fbbf24';ctx.lineWidth=8;ctx.stroke();
 }
 function showWheelWinner(name){
- const root=$('#modalRoot');if(!root)return;
- root.innerHTML=`<div class="wheel-modal-back"><div class="wheel-winner-modal"><div class="wheel-winner-icon">🏆</div><h2>ยินดีด้วย! ผู้โชคดีคือ</h2><div class="wheel-winner-name">${esc(name)}</div><p style="color:#64748b;margin:0 0 20px">ขอแสดงความยินดีกับผู้ที่ได้รับเลือกในครั้งนี้</p><button type="button" class="btn primary" id="closeWheelWinner">ตกลง</button></div></div>`;
- const close=()=>root.innerHTML='';$('#closeWheelWinner').onclick=close;root.querySelector('.wheel-modal-back').onclick=e=>{if(e.target.classList.contains('wheel-modal-back'))close()};
+ const result=$('#wheelResult');
+ if(result)result.innerHTML=`<span class="muted-note">🏆 ผู้โชคดีคือ</span><br><strong>${esc(name)}</strong>`;
 }
 function renderSavedTeams(){
  const target=$('#wheelTeamsResult');if(!target)return;
  if(!savedWheelTeams){target.innerHTML='';return}
  target.innerHTML=`<div class="wheel-team-grid">${savedWheelTeams.teams.map((team,i)=>`<div class="wheel-team"><h4><span>🛡️ ทีม ${i+1}</span><span class="muted-note">${team.members.length} คน</span></h4><p class="team-leader">👑 หัวหน้าทีม: ${esc(team.leader)}</p>${team.members.filter(n=>n!==team.leader).map(name=>`<p class="team-member">${esc(name)}</p>`).join('')||'<p class="muted-note">ไม่มีสมาชิกเพิ่มเติม</p>'}</div>`).join('')}</div><div class="toolbar" style="margin-top:12px"><button type="button" class="btn small" id="wheelEditLeaders">✎ เปลี่ยนหัวหน้าทีม</button></div>`;
- $('#wheelEditLeaders')?.addEventListener('click',()=>openLeaderPicker(savedWheelTeams.teams));
+ $('#wheelEditLeaders')?.addEventListener('click',()=>openLeaderPicker(savedWheelTeams.teams, wheelNames()));
 }
-function openLeaderPicker(teams){
+function openLeaderPicker(teams, allNames=teams.flatMap(t=>t.members)){
  const root=$('#modalRoot');if(!root)return;
- root.innerHTML=`<div class="wheel-modal-back"><form class="wheel-leader-modal"><div style="font-size:34px">👑</div><h2>กำหนดหัวหน้าทีม</h2><p class="muted-note">เลือกสมาชิกจากแต่ละทีมให้เป็นหัวหน้าทีมได้ด้วยตัวเอง</p>${teams.map((team,i)=>`<div class="wheel-leader-row"><label>ทีม ${i+1}</label><select name="leader${i}" required>${team.members.map(n=>`<option value="${esc(n)}" ${n===team.leader?'selected':''}>${esc(n)}</option>`).join('')}</select></div>`).join('')}<div class="wheel-leader-actions"><button type="button" class="btn" id="cancelLeaderPick">ยกเลิก</button><button type="submit" class="btn primary">ยืนยันหัวหน้าทีม</button></div></form></div>`;
+ const names=[...new Set(allNames.map(n=>String(n).trim()).filter(Boolean))];
+ root.innerHTML=`<div class="wheel-modal-back"><form class="wheel-leader-modal"><div style="font-size:34px">👑</div><h2>กำหนดหัวหน้าทีม</h2><p class="muted-note">เลือกหัวหน้าทีมจากรายชื่อทั้งหมด ชื่อที่เลือกให้ทีมอื่นแล้วจะไม่แสดงซ้ำ</p>${teams.map((team,i)=>`<div class="wheel-leader-row"><label>ทีม ${i+1}</label><select name="leader${i}" data-leader-index="${i}" required>${names.map(n=>`<option value="${esc(n)}" ${n===team.leader?'selected':''}>${esc(n)}</option>`).join('')}</select></div>`).join('')}<div class="wheel-leader-actions"><button type="button" class="btn" id="cancelLeaderPick">ยกเลิก</button><button type="submit" class="btn primary">ยืนยันหัวหน้าทีม</button></div></form></div>`;
+ const form=root.querySelector('form');
+ const syncOptions=()=>{
+  const selects=[...form.querySelectorAll('select[data-leader-index]')],chosen=selects.map(x=>x.value);
+  selects.forEach((sel,i)=>{
+   const keep=sel.value;
+   sel.innerHTML=names.filter(n=>!chosen.some((v,j)=>j!==i&&v===n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+   if(names.includes(keep)&&!chosen.some((v,j)=>j!==i&&v===keep))sel.value=keep;
+  });
+ };
+ form.querySelectorAll('select').forEach(sel=>sel.addEventListener('change',syncOptions));
+ syncOptions();
  $('#cancelLeaderPick').onclick=()=>root.innerHTML='';
  root.querySelector('.wheel-modal-back').onclick=e=>{if(e.target.classList.contains('wheel-modal-back'))root.innerHTML=''};
- root.querySelector('form').onsubmit=e=>{e.preventDefault();const data=new FormData(e.currentTarget);teams.forEach((team,i)=>team.leader=data.get(`leader${i}`));savedWheelTeams={...savedWheelTeams,teams,updatedAt:new Date().toISOString()};localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));root.innerHTML='';renderSavedTeams();toast('บันทึกหัวหน้าทีมเรียบร้อยแล้ว')};
+ form.onsubmit=e=>{
+  e.preventDefault();
+  const data=new FormData(form),leaders=teams.map((team,i)=>data.get(`leader${i}`));
+  if(new Set(leaders).size!==leaders.length){toast('หัวหน้าทีมแต่ละทีมต้องไม่ซ้ำกัน');return}
+  teams.forEach((team,i)=>team.leader=leaders[i]);
+  savedWheelTeams={...(savedWheelTeams||{}),teams,updatedAt:new Date().toISOString()};
+  localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));
+  root.innerHTML='';renderSavedTeams();toast('บันทึกหัวหน้าทีมเรียบร้อยแล้ว');
+ };
 }
-
 function wheel(){
  if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงวงล้อชื่อ</div>';
  const names=state.members.filter(m=>m.active).map(m=>m.name);
@@ -148,11 +166,8 @@ function bindWheel(){
   for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
   const teams=Array.from({length:count},()=>[]);list.forEach((name,i)=>teams[i%count].push(name));
   const draftTeams=teams.map(members=>({leader:members[0],members}));
-  openLeaderPicker(draftTeams);
+  openLeaderPicker(draftTeams,list);
   $('#wheelResult').textContent=`สุ่มแบ่งสมาชิก ${list.length} คน เป็น ${count} ทีมแล้ว กรุณาเลือกหัวหน้าทีม`;
-  // บันทึกผลทีมเมื่อผู้ใช้ยืนยันหัวหน้าทีมในหน้าต่างเลือกหัวหน้าเท่านั้น
-  const root=$('#modalRoot');const form=root?.querySelector('form');
-  if(form){form.onsubmit=e=>{e.preventDefault();const data=new FormData(e.currentTarget);draftTeams.forEach((team,i)=>team.leader=data.get(`leader${i}`));savedWheelTeams={teams:draftTeams,createdAt:new Date().toISOString()};localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));root.innerHTML='';renderSavedTeams();toast(`บันทึกผลแบ่งทีม ${count} ทีม พร้อมหัวหน้าทีมแล้ว`)}}
 
  });
 }
@@ -198,7 +213,7 @@ function deliveries(){
  if(isAdmin()) return `<div class="panel"><div class="panel-head"><div><h3>กำหนดรายการส่งของประจำวัน</h3><div class="panel-sub">เลือกไอเทมจากคลัง · ตรวจยอดส่งรายสมาชิก · ยอดที่บันทึกจะเพิ่มเข้าคลังทันที</div></div><button class="btn primary" id="addDailyTask">＋ เพิ่มส่งของ</button></div>
  <div class="toolbar"><div class="field" style="flex:1;min-width:220px"><label>ค้นหาชื่อสมาชิกในระบบส่งของ</label><input id="deliveryMemberSearch" type="search" placeholder="พิมพ์ชื่อสมาชิก..."></div></div>
  <div class="panel-sub">ภาพรวมยอดส่งสะสมของสมาชิกทุกคน</div>
- <div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>รายการที่ต้องส่ง</th><th>ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะภาพรวม</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const mine=tasks.filter(t=>!t.closed || (contrib.some(c=>c.taskId===t.id&&c.memberId===m.id)));const due=mine.reduce((n,t)=>n+Math.max(0,t.qty-(contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0)),0);const sent=mine.reduce((n,t)=>n+Math.min(t.qty,contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0),0);return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}" data-absent-count="${absent.length}"><td><b>${esc(m.name)}</b></td><td>${mine.length} รายการ</td><td>${sent}</td><td>${due}</td><td><span class="pill ${due?'yellow':'green'}">${due?'ยังมียอดค้าง':'ครบตามรายการ'}</span></td></tr>`}).join('')||'<tr><td colspan="5" class="empty">ไม่มีสมาชิก</td></tr>'}</tbody></table></div>
+ <div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>รายการที่ต้องส่ง</th><th>ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะภาพรวม</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const mine=tasks.filter(t=>!t.closed || (contrib.some(c=>c.taskId===t.id&&c.memberId===m.id)));const due=mine.reduce((n,t)=>n+Math.max(0,t.qty-(contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0)),0);const sent=mine.reduce((n,t)=>n+Math.min(t.qty,contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0),0);return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}"><td><b>${esc(m.name)}</b></td><td>${mine.length} รายการ</td><td>${sent}</td><td>${due}</td><td><span class="pill ${due?'yellow':'green'}">${due?'ยังมียอดค้าง':'ครบตามรายการ'}</span></td></tr>`}).join('')||'<tr><td colspan="5" class="empty">ไม่มีสมาชิก</td></tr>'}</tbody></table></div>
  <div class="table-wrap"><table><thead><tr><th>วันที่</th><th>รายการ</th><th>กำหนด/คน</th><th>ส่งครบ</th><th>ค้างส่ง</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>${tasks.map(t=>{const cs=contrib.filter(c=>c.taskId===t.id);const active=state.members.filter(m=>m.active);const done=active.filter(m=>{const c=cs.find(x=>x.memberId===m.id);return c&&(c.complete||c.qty>=t.qty)}).length;const pending=active.length-done;return `<tr><td>${t.date}</td><td><b>${esc(t.name)}</b></td><td>${t.qty} ${esc(t.unit)}</td><td>${done}/${active.length} คน</td><td><span class="pill ${pending?'yellow':'green'}">${pending} คน</span></td><td><span class="pill ${t.closed?'blue':'green'}">${t.closed?'ปิดวันแล้ว':'กำลังดำเนินการ'}</span></td><td>${!t.closed?`<button class="btn success small" data-close-task="${t.id}">ปิดวัน</button> `:''}<button class="btn danger small" data-delete-task="${t.id}">ลบรายการ</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">ยังไม่มีรายการส่งของ</td></tr>'}</tbody></table></div></div>
  ${tasks.map(t=>`<div class="panel"><div class="panel-head"><div><h3>${esc(t.name)} · ${t.date}</h3><div class="panel-sub">กำหนด ${t.qty} ${esc(t.unit)} ต่อคน · เลือกบันทึกยอดที่ส่งจริง หรือกดส่งครบ</div></div><span class="pill ${t.closed?'blue':'green'}">${t.closed?'ปิดวันแล้ว':'เปิดรับส่ง'}</span></div><div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>ยอดที่ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะ</th><th>จำนวนที่ส่ง</th><th>บันทึก</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const c=contrib.find(x=>x.taskId===t.id&&x.memberId===m.id),sent=c?.qty||0,left=Math.max(0,t.qty-sent),complete=left===0;return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}"><td><b>${esc(m.name)}</b></td><td>${sent} ${esc(t.unit)}</td><td>${left} ${esc(t.unit)}</td><td><span class="pill ${complete?'green':'yellow'}">${complete?'ส่งครบ':'ยังไม่ครบ'}</span></td><td><input type="number" min="0" step="1" id="admin-qty-${t.id}-${m.id}" value="${sent}" style="max-width:110px" ${t.closed?'disabled':''}></td><td>${!t.closed?`<button class="btn small" data-admin-save-contribution="${t.id}" data-member="${m.id}">บันทึก</button> <button class="btn success small" data-admin-complete-contribution="${t.id}" data-member="${m.id}">ส่งครบ</button>`:'-'}</td></tr>`}).join('')}</tbody></table></div></div>`).join('')}
  <div class="panel"><h3>รายงานยอดค้างส่งแยกตามวัน</h3><div class="table-wrap"><table><thead><tr><th>วันที่ค้าง</th><th>สมาชิก</th><th>รายการ</th><th>กำหนด</th><th>ส่งแล้ว</th><th>คงค้าง</th></tr></thead><tbody>${tasks.flatMap(t=>state.members.filter(m=>m.active).map(m=>{const c=contrib.find(x=>x.taskId===t.id&&x.memberId===m.id);const due=Math.max(0,t.qty-(c?.qty||0));return due?`<tr><td>${t.date}</td><td>${esc(m.name)}</td><td>${esc(t.name)}</td><td>${t.qty}</td><td>${c?.qty||0}</td><td><span class="pill red">${due} ${esc(t.unit)}</span></td></tr>`:''})).join('')||'<tr><td colspan="6" class="empty">ไม่มีสมาชิกค้างส่ง</td></tr>'}</tbody></table></div></div>`;
@@ -244,7 +259,7 @@ function history(){
      `).join('') || '<span class="muted-note">ไม่มีประวัติ</span>';
 
    return `
-   <div class="panel history-member-card" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}" data-absent-count="${absent.length}">
+   <div class="panel history-member-card" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}">
      <div class="panel-head">
        <div><h3>${esc(m.name)}</h3>
        <div class="panel-sub">${esc(m.rank || 'สมาชิก')}</div></div>
