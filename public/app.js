@@ -1,4 +1,5 @@
 const $ = s => document.querySelector(s);
+let historyAbsentOnly = false;
 let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), reportData = null, auditData = null, auditRange = { from: '', to: '', q: '' }, reportRange = { from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'), to: new Date().toLocaleDateString('en-CA') };
 const pageNames = { dashboard:'ภาพรวม', reports:'รายงานและสถิติ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
@@ -131,7 +132,7 @@ function deliveries(){
  if(isAdmin()) return `<div class="panel"><div class="panel-head"><div><h3>กำหนดรายการส่งของประจำวัน</h3><div class="panel-sub">เลือกไอเทมจากคลัง · ตรวจยอดส่งรายสมาชิก · ยอดที่บันทึกจะเพิ่มเข้าคลังทันที</div></div><button class="btn primary" id="addDailyTask">＋ เพิ่มส่งของ</button></div>
  <div class="toolbar"><div class="field" style="flex:1;min-width:220px"><label>ค้นหาชื่อสมาชิกในระบบส่งของ</label><input id="deliveryMemberSearch" type="search" placeholder="พิมพ์ชื่อสมาชิก..."></div></div>
  <div class="panel-sub">ภาพรวมยอดส่งสะสมของสมาชิกทุกคน</div>
- <div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>รายการที่ต้องส่ง</th><th>ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะภาพรวม</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const mine=tasks.filter(t=>!t.closed || (contrib.some(c=>c.taskId===t.id&&c.memberId===m.id)));const due=mine.reduce((n,t)=>n+Math.max(0,t.qty-(contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0)),0);const sent=mine.reduce((n,t)=>n+Math.min(t.qty,contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0),0);return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}"><td><b>${esc(m.name)}</b></td><td>${mine.length} รายการ</td><td>${sent}</td><td>${due}</td><td><span class="pill ${due?'yellow':'green'}">${due?'ยังมียอดค้าง':'ครบตามรายการ'}</span></td></tr>`}).join('')||'<tr><td colspan="5" class="empty">ไม่มีสมาชิก</td></tr>'}</tbody></table></div>
+ <div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>รายการที่ต้องส่ง</th><th>ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะภาพรวม</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const mine=tasks.filter(t=>!t.closed || (contrib.some(c=>c.taskId===t.id&&c.memberId===m.id)));const due=mine.reduce((n,t)=>n+Math.max(0,t.qty-(contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0)),0);const sent=mine.reduce((n,t)=>n+Math.min(t.qty,contrib.find(c=>c.taskId===t.id&&c.memberId===m.id)?.qty||0),0);return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}" data-absent-count="${absent.length}"><td><b>${esc(m.name)}</b></td><td>${mine.length} รายการ</td><td>${sent}</td><td>${due}</td><td><span class="pill ${due?'yellow':'green'}">${due?'ยังมียอดค้าง':'ครบตามรายการ'}</span></td></tr>`}).join('')||'<tr><td colspan="5" class="empty">ไม่มีสมาชิก</td></tr>'}</tbody></table></div>
  <div class="table-wrap"><table><thead><tr><th>วันที่</th><th>รายการ</th><th>กำหนด/คน</th><th>ส่งครบ</th><th>ค้างส่ง</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>${tasks.map(t=>{const cs=contrib.filter(c=>c.taskId===t.id);const active=state.members.filter(m=>m.active);const done=active.filter(m=>{const c=cs.find(x=>x.memberId===m.id);return c&&(c.complete||c.qty>=t.qty)}).length;const pending=active.length-done;return `<tr><td>${t.date}</td><td><b>${esc(t.name)}</b></td><td>${t.qty} ${esc(t.unit)}</td><td>${done}/${active.length} คน</td><td><span class="pill ${pending?'yellow':'green'}">${pending} คน</span></td><td><span class="pill ${t.closed?'blue':'green'}">${t.closed?'ปิดวันแล้ว':'กำลังดำเนินการ'}</span></td><td>${!t.closed?`<button class="btn success small" data-close-task="${t.id}">ปิดวัน</button> `:''}<button class="btn danger small" data-delete-task="${t.id}">ลบรายการ</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">ยังไม่มีรายการส่งของ</td></tr>'}</tbody></table></div></div>
  ${tasks.map(t=>`<div class="panel"><div class="panel-head"><div><h3>${esc(t.name)} · ${t.date}</h3><div class="panel-sub">กำหนด ${t.qty} ${esc(t.unit)} ต่อคน · เลือกบันทึกยอดที่ส่งจริง หรือกดส่งครบ</div></div><span class="pill ${t.closed?'blue':'green'}">${t.closed?'ปิดวันแล้ว':'เปิดรับส่ง'}</span></div><div class="table-wrap"><table><thead><tr><th>สมาชิก</th><th>ยอดที่ส่งแล้ว</th><th>คงเหลือ</th><th>สถานะ</th><th>จำนวนที่ส่ง</th><th>บันทึก</th></tr></thead><tbody>${state.members.filter(m=>m.active).map(m=>{const c=contrib.find(x=>x.taskId===t.id&&x.memberId===m.id),sent=c?.qty||0,left=Math.max(0,t.qty-sent),complete=left===0;return `<tr class="delivery-member-row" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}"><td><b>${esc(m.name)}</b></td><td>${sent} ${esc(t.unit)}</td><td>${left} ${esc(t.unit)}</td><td><span class="pill ${complete?'green':'yellow'}">${complete?'ส่งครบ':'ยังไม่ครบ'}</span></td><td><input type="number" min="0" step="1" id="admin-qty-${t.id}-${m.id}" value="${sent}" style="max-width:110px" ${t.closed?'disabled':''}></td><td>${!t.closed?`<button class="btn small" data-admin-save-contribution="${t.id}" data-member="${m.id}">บันทึก</button> <button class="btn success small" data-admin-complete-contribution="${t.id}" data-member="${m.id}">ส่งครบ</button>`:'-'}</td></tr>`}).join('')}</tbody></table></div></div>`).join('')}
  <div class="panel"><h3>รายงานยอดค้างส่งแยกตามวัน</h3><div class="table-wrap"><table><thead><tr><th>วันที่ค้าง</th><th>สมาชิก</th><th>รายการ</th><th>กำหนด</th><th>ส่งแล้ว</th><th>คงค้าง</th></tr></thead><tbody>${tasks.flatMap(t=>state.members.filter(m=>m.active).map(m=>{const c=contrib.find(x=>x.taskId===t.id&&x.memberId===m.id);const due=Math.max(0,t.qty-(c?.qty||0));return due?`<tr><td>${t.date}</td><td>${esc(m.name)}</td><td>${esc(t.name)}</td><td>${t.qty}</td><td>${c?.qty||0}</td><td><span class="pill red">${due} ${esc(t.unit)}</span></td></tr>`:''})).join('')||'<tr><td colspan="6" class="empty">ไม่มีสมาชิกค้างส่ง</td></tr>'}</tbody></table></div></div>`;
@@ -210,9 +211,12 @@ function history(){
    </div>
  </div>
  <div class="panel">
-   <div class="field">
-     <label>ค้นหาชื่อสมาชิกในประวัติการขาด</label>
-     <input id="historyMemberSearch" type="search" placeholder="พิมพ์ชื่อสมาชิกที่ต้องการค้นหา...">
+   <div class="toolbar" style="align-items:end;gap:10px;flex-wrap:wrap">
+     <div class="field" style="flex:1;min-width:220px">
+       <label>ค้นหาชื่อสมาชิกในประวัติการขาด</label>
+       <input id="historyMemberSearch" type="search" placeholder="พิมพ์ชื่อสมาชิกที่ต้องการค้นหา...">
+     </div>
+     <button type="button" class="btn danger" id="historyAbsentFilter" aria-pressed="${historyAbsentOnly}">ขาด</button>
    </div>
  </div>
  <div id="historyMemberList">${summary}</div>
@@ -237,23 +241,35 @@ function wire(){
  $('#exportReportCsv')?.addEventListener('click',exportReportCsv);
  $('#exportReportPng')?.addEventListener('click',exportReportPng);
  $('#exportReportPdf')?.addEventListener('click',()=>window.print());
- // ค้นหาชื่อสมาชิกในหน้าประวัติการขาด/ลา/ติดธุระ
+ // ค้นหาชื่อสมาชิก และกรองเฉพาะสมาชิกที่เคยขาด
  const historySearch = $('#historyMemberSearch');
- historySearch?.addEventListener('input', () => {
-   const keyword = historySearch.value.trim().toLocaleLowerCase('th');
+ const absentFilterButton = $('#historyAbsentFilter');
+ const applyHistoryFilters = () => {
+   const keyword = (historySearch?.value || '').trim().toLocaleLowerCase('th');
    const cards = [...document.querySelectorAll('#historyMemberList .history-member-card')];
    let visibleCount = 0;
-
    cards.forEach(card => {
      const memberName = (card.dataset.memberName || '').toLocaleLowerCase('th');
-     const matched = !keyword || memberName.includes(keyword);
+     const hasAbsent = Number(card.dataset.absentCount || 0) > 0;
+     const matched = (!keyword || memberName.includes(keyword)) && (!historyAbsentOnly || hasAbsent);
      card.hidden = !matched;
      if (matched) visibleCount++;
    });
-
    const noResults = $('#historyNoResults');
-   if (noResults) noResults.hidden = visibleCount !== 0;
+   if (noResults) {
+     noResults.hidden = visibleCount !== 0;
+     noResults.textContent = historyAbsentOnly ? 'ไม่พบสมาชิกที่เคยมีประวัติขาด' : 'ไม่พบชื่อสมาชิกที่ตรงกับคำค้นหา';
+   }
+ };
+ historySearch?.addEventListener('input', applyHistoryFilters);
+ absentFilterButton?.addEventListener('click', () => {
+   historyAbsentOnly = !historyAbsentOnly;
+   absentFilterButton.classList.toggle('active', historyAbsentOnly);
+   absentFilterButton.setAttribute('aria-pressed', String(historyAbsentOnly));
+   applyHistoryFilters();
  });
+ if (absentFilterButton) absentFilterButton.classList.toggle('active', historyAbsentOnly);
+ applyHistoryFilters();
 
  $('#attendanceDate')?.addEventListener('change',async e=>{selectedDate=e.target.value;await refresh()});
 
