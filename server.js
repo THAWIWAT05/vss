@@ -132,10 +132,29 @@ app.post('/api/login', (req, res) => {
   const u = db.users.find(x => x.username === String(username || '').trim() && x.active);
   if (!u || !bcrypt.compareSync(String(password || ''), u.passwordHash)) return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
   req.session.user = publicUser(u);
+  log(db, u.name, 'เข้าสู่ระบบ', 'เข้าสู่ระบบสำเร็จ'); writeDB(db);
   res.json({ user: req.session.user, isAdmin: admin(req) });
 });
-app.post('/api/logout', auth, (req, res) => req.session.destroy(() => res.json({ ok: true })));
+app.post('/api/logout', auth, (req, res) => { const db = readDB(); log(db, req.session.user.name, 'ออกจากระบบ', 'ออกจากระบบ'); writeDB(db); req.session.destroy(() => res.json({ ok: true })); });
 app.get('/api/me', (req, res) => res.json({ user: req.session.user || null, isAdmin: !!admin(req) }));
+
+// Admin audit trail: searchable history of recorded system actions.
+app.get('/api/audit', auth, adminOnly, (req, res) => {
+  const db = readDB();
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  const q = String(req.query.q || '').trim().toLocaleLowerCase('th');
+  const validDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!validDate(from) || !validDate(to) || (from && to && from > to)) return res.status(400).json({ error: 'ช่วงวันที่ไม่ถูกต้อง' });
+  const logs = (db.logs || []).filter(entry => {
+    const date = String(entry.createdAt || '').slice(0, 10);
+    if (from && (!date || date < from)) return false;
+    if (to && (!date || date > to)) return false;
+    if (q && ![entry.actor, entry.action, entry.detail].some(v => String(v || '').toLocaleLowerCase('th').includes(q))) return false;
+    return true;
+  }).slice(0, 1000);
+  res.json({ logs, total: logs.length, limit: 1000, range: { from, to } });
+});
 
 // Admin report data for dashboard and exports. All date filtering is performed server-side.
 app.get('/api/reports', auth, adminOnly, (req, res) => {
@@ -197,9 +216,12 @@ app.post('/api/attendance', auth, adminOnly, (req, res) => {
   const date = String(req.body.date || today());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'วันที่ไม่ถูกต้อง' });
   let row = db.attendance.find(x => x.date === date && x.memberId === m.id && x.sessionId === slot.id);
+  const wasExisting = !!row;
+  const previousStatus = row?.status || 'ยังไม่มีข้อมูล';
+  const previousNote = row?.note || '';
   if (row) { row.status = status; row.note = String(note || '').trim(); row.markedBy = req.session.user.name; row.updatedAt = isoNow(); }
   else { row = { id: Date.now() + Math.floor(Math.random()*1000), date, memberId: m.id, memberName: m.name, sessionId: slot.id, sessionLabel: slot.label, time: slot.time, status, note: String(note || '').trim(), markedBy: req.session.user.name, createdAt: isoNow(), updatedAt: isoNow() }; db.attendance.push(row); }
-  log(db, req.session.user.name, 'เช็กชื่อสมาชิก', `${m.name} · ${slot.time} · ${status}${row.note ? ' · ' + row.note : ''}`);
+  log(db, req.session.user.name, wasExisting ? 'แก้ไขการเช็กชื่อ' : 'เช็กชื่อสมาชิก', `${m.name} · ${slot.time} · ${previousStatus} → ${status}${previousNote || row.note ? ' · หมายเหตุ: ' + (previousNote || '-') + ' → ' + (row.note || '-') : ''}`);
   writeDB(db); res.json(row);
 });
 app.get('/api/attendance/summary', auth, adminOnly, (req, res) => {
@@ -229,7 +251,11 @@ app.post('/api/attendance/bulk', auth, adminOnly, (req, res) => {
     let a = db.attendance.find(y => y.date === date && y.memberId === m.id && y.sessionId === slot.id);
     if (!a) { a = {id:Date.now()+Math.floor(Math.random()*100000),date,memberId:m.id,memberName:m.name,sessionId:slot.id,sessionLabel:slot.label,time:slot.time,createdAt:isoNow()}; db.attendance.push(a); }
     const finalStatus = x.status === 'unmarked' ? 'present' : x.status;
-    Object.assign(a,{status:finalStatus,note:String(x.note||'').trim(),markedBy:req.session.user.name,updatedAt:isoNow()});
+    const oldStatus = a.status || 'ยังไม่มีข้อมูล';
+    const oldNote = a.note || '';
+    const newNote = String(x.note||'').trim();
+    Object.assign(a,{status:finalStatus,note:newNote,markedBy:req.session.user.name,updatedAt:isoNow()});
+    if (oldStatus !== finalStatus || oldNote !== newNote) log(db,req.session.user.name,'บันทึก/แก้ไขเช็กชื่อรายคน',`${m.name} · ${date} · ${slot.label} · ${oldStatus} → ${finalStatus}${oldNote !== newNote ? ' · หมายเหตุ: ' + (oldNote || '-') + ' → ' + (newNote || '-') : ''}`);
   }
   log(db,req.session.user.name,'บันทึกเช็กชื่อทั้งหมด',`${date} · ${slot.label} · ${rows.length} คน`);
   writeDB(db); res.json({ok:true,count:rows.length});
@@ -248,11 +274,12 @@ app.post('/api/daily-tasks', auth, adminOnly, (req,res) => {
 function saveContribution(db, task, member, qty, complete, actor) {
   let c=db.contributions.find(x=>x.taskId===task.id&&x.memberId===member.id);
   if(!c){c={id:Date.now()+Math.floor(Math.random()*10000),taskId:task.id,date:task.date,memberId:member.id,member:member.name,qty:0,complete:false,stockedQty:0,updatedAt:isoNow()};db.contributions.push(c);}
+  const previousQty=Number(c.qty||0);
   const oldStocked=Number(c.stockedQty||0), finalQty=complete?task.qty:qty;
   c.qty=finalQty;c.complete=finalQty>=task.qty;c.updatedAt=isoNow();
   const item=task.itemId?db.items.find(i=>i.id===task.itemId):null;
   if(item){const delta=finalQty-oldStocked;item.qty=Math.max(0,item.qty+delta);c.stockedQty=oldStocked+delta;}
-  log(db,actor,'บันทึกยอดส่งของ',`${task.date} · ${task.name} · ${finalQty}/${task.qty} · ${member.name}`);
+  log(db,actor,previousQty===finalQty?'บันทึกยอดส่งของ':'แก้ไขยอดส่งของ',`${task.date} · ${task.name} · ${member.name} · ${previousQty} → ${finalQty}/${task.qty}`);
   return c;
 }
 app.post('/api/contributions', auth, (req,res) => {
