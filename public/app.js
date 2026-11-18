@@ -357,7 +357,7 @@ function history(){
      `).join('') || '<span class="muted-note">ไม่มีประวัติ</span>';
 
    return `
-   <div class="panel history-member-card" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}">
+   <div class="panel history-member-card" data-member-name="${esc(m.name.toLocaleLowerCase('th'))}" data-absent-count="${absent.length}">
      <div class="panel-head">
        <div><h3>${esc(m.name)}</h3>
        <div class="panel-sub">${esc(m.rank || 'สมาชิก')}</div></div>
