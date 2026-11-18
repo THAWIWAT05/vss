@@ -8,73 +8,91 @@ const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* GANG CONTROL REAL AUDIO ENGINE — CC0 MP3 assets (no synthesized Web Audio tones) */
+/* GANG CONTROL CINEMATIC AUDIO ENGINE — real CC0 audio files + scene ambience */
 const GCSound = (()=>{
- const defaults={enabled:true,volume:0.72};
+ const defaults={enabled:true,volume:0.72,ambience:true,ambienceVolume:0.22};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
- let unlocked=false;
+ let unlocked=false, ambient=null, ambientKind='', ambientFadeTimer=null;
  const assets={
-  // Realistic creature sounds
+  // Creature / horror events
   wolf:'https://sfxmint.com/dl/werewolf-howl-05.mp3',
-  night:'https://sfxmint.com/dl/werewolf-howl-04.mp3',
-  wolfAttack:'https://sfxmint.com/dl/wolf-growl-03.mp3',
+  nightHowl:'https://sfxmint.com/dl/werewolf-howl-01.mp3',
+  wolfAttack:'https://sfxmint.com/dl/werewolf-howl-13.mp3',
   kill:'https://sfxmint.com/dl/wolf-growl-03.mp3',
-  death:'https://sfxmint.com/dl/wolf-growl-03.mp3',
-  winWolf:'https://sfxmint.com/dl/werewolf-howl-05.mp3',
-  // Fantasy role / action sounds
+  death:'https://sfxmint.com/dl/body-fall-01.mp3',
+  winWolf:'https://sfxmint.com/dl/werewolf-howl-07.mp3',
+  // Fantasy abilities / role actions
   protect:'https://spritepilot.com/free-assets/sound-effects/magic/magic-shield.mp3',
   seer:'https://spritepilot.com/free-assets/sound-effects/magic/curse.mp3',
   witch:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
   potion:'https://spritepilot.com/free-assets/sound-effects/magic/potion.mp3',
   poison:'https://spritepilot.com/free-assets/sound-effects/magic/poison.mp3',
-  hunter:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
-  draw:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
+  hunter:'https://sfxmint.com/dl/arrow-flyby-01.mp3',
+  hunterHit:'https://sfxmint.com/dl/arrow-impact-01.mp3',
+  shieldHit:'https://sfxmint.com/dl/shield-block-01.mp3',
   jester:'https://sfxmint.com/dl/growth-bfe32e67e3de9719a78a5544-part-1-v2.mp3',
-  // UI / round results use real magical chimes rather than synthesized tones
+  // Round cues
   start:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
   success:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
   finish:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  dawn:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
+  dawn:'https://sfxmint.com/dl/horror-stinger-76.mp3',
   bell:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
   winVillage:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
   vote:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
   voteResult:'https://spritepilot.com/free-assets/sound-effects/magic/curse.mp3',
-  lose:'https://spritepilot.com/free-assets/sound-effects/magic/curse.mp3',
+  lose:'https://sfxmint.com/dl/horror-stinger-76.mp3',
   error:'https://spritepilot.com/free-assets/sound-effects/magic/poison.mp3',
   join:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
-  tap:null
+  // Continuous scene beds — CC0
+  ambienceNight:'https://sfxmint.com/dl/night-ambience-02.mp3',
+  ambienceDay:'https://sfxmint.com/dl/village-ambience-02.mp3'
  };
  const save=()=>{try{localStorage.setItem('gcSoundSettings',JSON.stringify(settings))}catch{}};
  function unlock(){unlocked=true;return Promise.resolve(true)}
- function play(kind='tap'){
+ function play(kind='tap',opts={}){
   if(!settings.enabled||settings.volume<=0)return Promise.resolve(false);
-  const url=assets[kind]||null;if(!url)return Promise.resolve(false);
-  const audio=new Audio(url);audio.preload='auto';audio.volume=Math.max(0,Math.min(1,settings.volume));
-  // Each event gets its own Audio instance so overlapping game events do not cut one another off.
-  return audio.play().then(()=>new Promise(resolve=>{audio.addEventListener('ended',()=>resolve(true),{once:true});audio.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(true),12000)})).catch(()=>false);
+  const url=assets[kind];if(!url)return Promise.resolve(false);
+  const audio=new Audio(url);audio.preload='auto';audio.volume=Math.max(0,Math.min(1,settings.volume*(opts.gain??1)));
+  if(opts.rate)audio.playbackRate=opts.rate;
+  return audio.play().then(()=>new Promise(resolve=>{audio.addEventListener('ended',()=>resolve(true),{once:true});audio.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(true),15000)})).catch(()=>false);
  }
+ async function sequence(items){for(const item of items){if(item.delay)await new Promise(r=>setTimeout(r,item.delay));await play(item.kind,{gain:item.gain??1});}}
+ function stopAmbience(){
+  if(ambientFadeTimer){clearInterval(ambientFadeTimer);ambientFadeTimer=null;}
+  if(!ambient){ambientKind='';return;}
+  const old=ambient;ambient=null;ambientKind='';const from=old.volume;let step=0;
+  const timer=setInterval(()=>{step++;old.volume=Math.max(0,from*(1-step/8));if(step>=8){clearInterval(timer);try{old.pause();old.src=''}catch{}}},70);
+ }
+ function setAmbience(scene){
+  if(!settings.enabled||!settings.ambience||settings.ambienceVolume<=0||!unlocked||!['night','day'].includes(scene)){stopAmbience();return;}
+  if(ambientKind===scene&&ambient&&!ambient.paused)return;
+  stopAmbience();const url=assets[scene==='night'?'ambienceNight':'ambienceDay'];
+  const a=new Audio(url);a.loop=true;a.preload='auto';a.volume=0;ambient=a;ambientKind=scene;
+  a.play().then(()=>{let step=0;ambientFadeTimer=setInterval(()=>{step++;if(a!==ambient){clearInterval(ambientFadeTimer);return;}a.volume=Math.min(settings.ambienceVolume,settings.ambienceVolume*step/12);if(step>=12){clearInterval(ambientFadeTimer);ambientFadeTimer=null;}},90)}).catch(()=>{if(ambient===a){ambient=null;ambientKind='';}});
+ }
+ function update(patch){settings={...settings,...patch};save();if(!settings.enabled||!settings.ambience)stopAmbience();else if(ambient){ambient.volume=settings.ambienceVolume;}}
  async function testAll(){
   if(!settings.enabled)return;
-  const sequence=['wolf','wolfAttack','protect','seer','potion','poison','hunter','jester','bell','death','winWolf','winVillage','lose'];
-  for(const kind of sequence){await play(kind);await new Promise(resolve=>setTimeout(resolve,180));}
+  const seq=['wolf','wolfAttack','kill','death','protect','seer','witch','potion','poison','hunter','hunterHit','jester','bell','winWolf','winVillage','lose'];
+  for(const kind of seq){await play(kind);await new Promise(r=>setTimeout(r,220));}
  }
- function update(patch){settings={...settings,...patch};save();}
- function get(){return {...settings,unlocked};}
- return {play,testAll,update,get,unlock};
+ function get(){return {...settings,unlocked,ambiencePlaying:!!ambient&&!ambient.paused}}
+ return {play,sequence,testAll,update,get,unlock,setAmbience,stopAmbience};
 })();
-
 function installGCSoundUI(){
  if(document.getElementById('gcSoundDock'))return;
- const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">72%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><small style="color:#94a3b8">เสียงไฟล์จริง: หมาป่าสมจริง + เวทมนตร์แฟนตาซี</small><button id="gcSoundTest">▶ ทดสอบเสียงทุกบทบาท</button><small id="gcSoundHint" style="color:#fbbf24">หากยังไม่มีเสียง ให้แตะปุ่มทดสอบเสียงหนึ่งครั้ง</small><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
+ const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียงเอฟเฟกต์ <span id="gcSoundValue">72%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><label>เสียงบรรยากาศฉาก <input id="gcAmbienceEnabled" type="checkbox"></label><label>ระดับเสียงบรรยากาศ <span id="gcAmbienceValue">22%</span></label><input id="gcAmbienceVolume" type="range" min="0" max="50" step="2"><small style="color:#94a3b8">กลางคืน: ป่ามืด จิ้งหรีด และลม · กลางวัน: หมู่บ้าน นก และเสียงผู้คน</small><button id="gcSoundTest">▶ ทดสอบเสียงทุกบทบาท</button><small id="gcSoundHint" style="color:#fbbf24">หากยังไม่มีเสียง ให้แตะปุ่มทดสอบเสียงหนึ่งครั้ง</small><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
  document.body.appendChild(dock);
- const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇';};
+ const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcAmbienceEnabled').checked=s.ambience;$s('gcAmbienceVolume').value=Math.round(s.ambienceVolume*100);$s('gcAmbienceValue').textContent=Math.round(s.ambienceVolume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇';};
  $s('gcSoundToggle').onclick=async()=>{await GCSound.unlock();$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
- $s('gcSoundEnabled').onchange=async e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked){await GCSound.unlock();GCSound.play('start')}};
+ $s('gcSoundEnabled').onchange=async e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked){await GCSound.unlock();GCSound.play('start');if(werewolfState?.room?.phase)GCSound.setAmbience(werewolfState.room.phase)}};
  $s('gcSoundVolume').oninput=e=>{const volume=Number(e.target.value)/100;GCSound.update({volume});$s('gcSoundValue').textContent=e.target.value+'%'};
- $s('gcSoundTest').onclick=async()=>{await GCSound.unlock();$s('gcSoundHint').textContent='กำลังเล่นตัวอย่างไฟล์เสียงจริงแต่ละบทบาท…';await GCSound.testAll();$s('gcSoundHint').textContent='ทดสอบครบแล้ว หากไม่ได้ยินให้ตรวจอินเทอร์เน็ต ระดับเสียง และแท็บเบราว์เซอร์';};
+ $s('gcAmbienceEnabled').onchange=e=>{GCSound.update({ambience:e.target.checked});if(e.target.checked&&werewolfState?.room?.phase)GCSound.setAmbience(werewolfState.room.phase);else GCSound.stopAmbience();};
+ $s('gcAmbienceVolume').oninput=e=>{const ambienceVolume=Number(e.target.value)/100;GCSound.update({ambienceVolume});$s('gcAmbienceValue').textContent=e.target.value+'%'};
+ $s('gcSoundTest').onclick=async()=>{await GCSound.unlock();$s('gcSoundHint').textContent='กำลังเล่นตัวอย่างเสียงเหตุการณ์และบทบาท…';await GCSound.testAll();$s('gcSoundHint').textContent='ทดสอบครบแล้ว หากไม่ได้ยินให้ตรวจอินเทอร์เน็ต ระดับเสียง และแท็บเบราว์เซอร์';};
  // Browser audio policies require a user gesture. Unlock on the first real interaction.
- const unlockOnce=()=>{GCSound.unlock();document.removeEventListener('pointerdown',unlockOnce,true);document.removeEventListener('keydown',unlockOnce,true);};
+ const unlockOnce=()=>{GCSound.unlock();const phase=werewolfState?.room?.phase;if(phase==='night'||phase==='day')GCSound.setAmbience(phase);document.removeEventListener('pointerdown',unlockOnce,true);document.removeEventListener('keydown',unlockOnce,true);};
  document.addEventListener('pointerdown',unlockOnce,true);document.addEventListener('keydown',unlockOnce,true);
  document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!b.closest('#gcSoundDock'))GCSound.play('tap')},true);
  sync();
@@ -622,30 +640,51 @@ async function loadWerewolf(roomId){
  const old=werewolfState?.room,now=next?.room;
  if(old&&now&&String(old.id)===String(now.id)){
   if(old.phase!==now.phase){
-   if(now.phase==='night'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
-   else if(now.phase==='day')GCSound.play('bell');
-   else if(now.phase==='vote')GCSound.play('vote');
-   else if(now.phase==='hunter_shot')GCSound.play('hunter');
-   else if(now.phase==='finished'){
+   if(now.phase==='night'){
+    GCSound.setAmbience('night');
+    GCSound.sequence([{kind:'nightHowl',gain:.82,delay:900}]);
+   }else if(now.phase==='day'){
+    GCSound.setAmbience('day');
+    GCSound.play('bell',{gain:.75});
+   }else if(now.phase==='vote'){
+    GCSound.play('vote',{gain:.65});
+   }else if(now.phase==='hunter_shot'){
+    GCSound.play('dawn',{gain:.55});
+   }else if(now.phase==='finished'){
+    GCSound.stopAmbience();
     const role=now.me?.role;
     const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?role==='wolf':now.winner==='village'?role!=='wolf'&&role!=='jester':false;
-    GCSound.play(now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose');
+    GCSound.sequence([{kind:'finish',gain:.65},{kind:now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose',gain:1,delay:650}]);
    }
   }
   const oldNight=JSON.stringify(old.lastNight||null),newNight=JSON.stringify(now.lastNight||null);
   if(newNight!==oldNight&&now.lastNight){
-   if((now.lastNight.killed||[]).length)GCSound.play('kill');
-   if(now.lastNight.saved||now.lastNight.bodyguardSacrifice)GCSound.play('protect');
+   const killed=(now.lastNight.killed||[]).length>0;
+   const scene=[];
+   if(now.lastNight.wolfAttack || (!('wolfAttack' in now.lastNight)&&killed))scene.push({kind:'wolfAttack',gain:.9,delay:250});
+   if(now.lastNight.poisoned)scene.push({kind:'poison',gain:.8,delay:scene.length?450:250});
+   if(killed)scene.push({kind:'death',gain:.78,delay:scene.length?420:250});
+   if(scene.length)GCSound.sequence(scene);
+   if(now.lastNight.saved||now.lastNight.bodyguardSacrifice){GCSound.sequence([{kind:'protect',gain:.8,delay:scene.length?1500:250},{kind:'shieldHit',gain:.75,delay:350}]);}
   }
   const oldVote=JSON.stringify(old.lastVote||null),newVote=JSON.stringify(now.lastVote||null);
   if(newVote!==oldVote&&now.lastVote){
    if(now.lastVote.role==='ตัวตลก')GCSound.play('jester');
+   else if(now.lastVote.name){GCSound.sequence([{kind:'voteResult',gain:.8},{kind:'death',gain:.8,delay:300}]);}
    else GCSound.play('voteResult');
   }
-  if(old.me?.alive!==false&&now.me?.alive===false)GCSound.play('death');
+  if(old.me?.alive!==false&&now.me?.alive===false){
+   // Personal death cue after the shared kill scene, so it does not double-play the body-fall effect.
+   GCSound.sequence([{kind:'lose',gain:.72,delay:650}]);
+  }
   if(!old.me?.role&&now.me?.role){const roleSound={wolf:'wolf',seer:'seer',witch:'witch',bodyguard:'protect',guardian:'protect',hunter:'hunter',jester:'jester',villager:'start'};GCSound.play(roleSound[now.me.role]||'start');}
   if(JSON.stringify(old.me?.seerResult||null)!==JSON.stringify(now.me?.seerResult||null)&&now.me?.seerResult)GCSound.play('seer');
  }
+ // On first room load after page refresh, restore the correct scene ambience without replaying story events.
+ if(now&&(!old||String(old.id)!==String(now.id))){
+  if(now.phase==='night'||now.phase==='day')GCSound.setAmbience(now.phase);else GCSound.stopAmbience();
+ }
+ if(!now)GCSound.stopAmbience();
  werewolfState=next;
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
 }
@@ -693,8 +732,8 @@ function wireWerewolf(){
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`)}catch(e){toast(e.message)}});
  $('#wwExit')?.addEventListener('click',async()=>{try{if(!confirm('ต้องการออกจากเกมนี้ใช่หรือไม่?'))return;await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/leave`,{method:'POST',body:'{}'});localStorage.removeItem('gcWerewolfRoom');await loadWerewolf('')}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.play('hunter');await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound,{gain:.82});await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.sequence([{kind:'hunter',gain:.9},{kind:'hunterHit',gain:.85,delay:400}]);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
  $('#wwOpenVote')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/open-vote`)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-vote]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันคะแนนโหวตนี้? เปลี่ยนคะแนนไม่ได้'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/vote`,{targetId:b.dataset.wwVote})}catch(e){toast(e.message)}});
  $('#wwRematch')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/rematch`)}catch(e){toast(e.message)}});
