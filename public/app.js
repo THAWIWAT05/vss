@@ -9,9 +9,20 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function installReportsNav(){
  const first=document.querySelector('.nav-item[data-page="dashboard"]');
  if(!first)return;
- const add=(key,label,icon,afterKey)=>{if(document.querySelector(`[data-page="${key}"]`))return;const btn=document.createElement('button');btn.className='nav-item';btn.dataset.page=key;btn.innerHTML=`<span>${icon}</span><span>${label}</span>`;const anchor=document.querySelector(`[data-page="${afterKey}"]`)||first;anchor.insertAdjacentElement('afterend',btn);btn.addEventListener('click',()=>{if(!isAdmin())return;page=key;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===btn));render();if(key==='reports')loadReports().catch(e=>toast(e.message));if(key==='audit')loadAudit().catch(e=>toast(e.message))});};
- add('reports','รายงานและสถิติ','▥','dashboard');
- add('audit','ประวัติการทำงาน','◷','reports');
+ const nav=first.parentElement;
+ const ensure=(key,label,icon)=>{
+  let btn=document.querySelector(`.nav-item[data-page="${key}"]`);
+  if(!btn){
+   btn=document.createElement('button');btn.className='nav-item';btn.dataset.page=key;
+   btn.innerHTML=`<span>${icon}</span><span>${label}</span>`;
+   btn.addEventListener('click',()=>{if(!isAdmin())return;page=key;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===btn));render();if(key==='reports')loadReports().catch(e=>toast(e.message));if(key==='audit')loadAudit().catch(e=>toast(e.message))});
+  }
+  return btn;
+ };
+ // ย้ายสองเมนูนี้ไปท้ายสุดของแถบเมนู โดยคงปุ่มเดิมและ event ไว้
+ const auditBtn=ensure('audit','ประวัติการทำงาน','◷');
+ const reportsBtn=ensure('reports','รายงานและสถิติ','▥');
+ nav.append(auditBtn,reportsBtn);
 }
 function installReportStyles(){if($('#reportStyles'))return;const st=document.createElement('style');st.id='reportStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
