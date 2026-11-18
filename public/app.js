@@ -61,7 +61,7 @@ function installWheelStyles(){if($('#wheelStyles'))return;const st=document.crea
 @media(max-width:480px){.bingo-banner{padding:16px}.bingo-main{padding:10px}.bingo-card-panel,.bingo-side-panel{padding:10px}.bingo-eventbar{padding:13px}.bingo-square{font-size:16px}.bingo-history-ball{width:30px;height:30px}}
 /* BINGO V8: instant marking and lightweight rendering */
 .bingo-square{transition:none!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}
-.bingo-square.marked{will-change:border-color;border:3px solid #d62929!important;border-radius:50%!important;background:#fff!important;color:#17483e!important;box-shadow:none!important}
+.bingo-square.marked{transition:none!important;will-change:auto;border:3px solid #d62929!important;border-radius:50%!important;background:#fff!important;color:#17483e!important;box-shadow:none!important}
 .bingo-number,.bingo-number.hit,.bingo-number.latest{background:#edf3f0!important;color:#799087!important;box-shadow:none!important}
 .bingo-number{transition:none!important}
 .bingo-countdown-wrap{display:flex;align-items:center;justify-content:center;gap:12px;margin:12px auto 6px}
@@ -80,7 +80,7 @@ function installWheelStyles(){if($('#wheelStyles'))return;const st=document.crea
 
 async function api(url, options={}) { const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'ดำเนินการไม่สำเร็จ'); return d; }
 let toastTimer=null;
-let bingoHasLoadedOnce=false;
+let bingoHasLoadedOnce=false, bingoServerOffset=0, bingoRedirectTimer=null;
 function toast(msg){
  let node=$('#gcToast');
  if(!node){node=document.createElement('div');node.id='gcToast';node.setAttribute('role','status');document.body.appendChild(node)}
@@ -452,17 +452,17 @@ function bingo(){
  const ballLabel=n=>n<=15?'B':n<=30?'I':n<=45?'N':n<=60?'G':'O';
  const roomCards=rooms.map(x=>`<article class="bingo-side-panel" style="margin:0"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><h3 style="margin:0 0 5px">${esc(x.title)}</h3><div class="bingo-muted">เจ้าของห้อง: ${esc(x.hostName)} · ${x.playerCount} คน</div><div class="bingo-muted">${x.status==='waiting'?'🟢 รอผู้เล่น':x.status==='playing'?'🔴 กำลังเล่น':'จบเกมแล้ว'}</div></div><button class="bingo-action" style="width:auto;padding:10px 18px" data-room-join="${esc(x.id)}" ${x.status!=='waiting'?'disabled':''}>เข้าร่วมห้อง</button></div></article>`).join('');
  if(!r)return `<section class="bingo-shell"><div class="bingo-banner"><div><div class="bingo-eyebrow">✦ LOS SANTOS BINGO CLUB · MULTI ROOM</div><h2>BINGO</h2><p>สร้างห้อง เล่นกับสมาชิก และลุ้น BINGO ไปพร้อมกัน</p></div><div class="bingo-live">● ROOM LOBBY</div></div><div class="bingo-eventbar"><div><div class="bingo-event-kicker">✦ CREATE YOUR ROOM</div><h3>สร้างห้อง BINGO ของคุณ</h3><p>ทุกคนสามารถสร้างห้องและเป็นเจ้าของห้องได้</p></div><button class="bingo-action" id="bingoCreate">＋ สร้างห้อง</button></div><div style="padding:18px"><div class="bingo-panel-head"><div><h3>ห้อง BINGO ทั้งหมด</h3><div class="bingo-muted">เลือกห้องที่กำลังรอผู้เล่นเพื่อเข้าร่วม</div></div><button class="bingo-create" id="bingoRefresh">↻ รีเฟรชห้อง</button></div><div style="display:grid;gap:10px">${roomCards||'<div class="bingo-empty"><div class="emoji">🎱</div><h3>ยังไม่มีห้อง BINGO</h3><p>สร้างห้องแรกเพื่อเริ่มเล่นได้เลย</p></div>'}</div></div></section>`;
- const card=me?`<section class="bingo-card-panel"><div class="bingo-panel-head"><div><h3>บัตรผู้เล่น · PLAYER TICKET</h3><div class="bingo-muted">แตะเลขที่ถูกสุ่มแล้วเพื่อวงกลมสีแดง</div></div><b style="color:#0b6b59">${me.marked.filter(Boolean).length}/25</b></div><div class="bingo-ticket"><div class="bingo-ticket-head"><strong>BINGO</strong><span>ROOM ${String(r.id).slice(-5)}</span></div><div class="bingo-card-grid">${['B','I','N','G','O'].map(x=>`<div class="bingo-letter">${x}</div>`).join('')}${me.card.map((n,i)=>{const free=i===12,hit=called.has(n);return `<button class="bingo-square ${free?'free':''} ${me.marked[i]?'marked':''} " data-bingo-cell="${i}" ${free||me.marked[i]||!hit||!active?'disabled':''}>${free?'✳':String(n).padStart(2,'0')}</button>`}).join('')}</div><div class="bingo-ticket-foot"><span>PLAYER TICKET · 75 BALL</span><span>${drawn.length}/75</span></div></div></section>`:'<section class="bingo-card-panel"><div class="bingo-empty">ไม่พบการ์ดผู้เล่นในห้องนี้</div></section>';
+ const card=me?`<section class="bingo-card-panel"><div class="bingo-panel-head"><div><h3>บัตรผู้เล่น · PLAYER TICKET</h3><div class="bingo-muted">แตะเลขที่ถูกสุ่มแล้วเพื่อวงกลมสีแดง</div></div><b style="color:#0b6b59">${me.marked.filter(Boolean).length}/25</b></div><div class="bingo-ticket"><div class="bingo-ticket-head"><strong>BINGO</strong><span>ROOM ${String(r.id).slice(-5)}</span></div><div class="bingo-card-grid">${['B','I','N','G','O'].map(x=>`<div class="bingo-letter">${x}</div>`).join('')}${me.card.map((n,i)=>{const free=i===12,hit=called.has(n);return `<button class="bingo-square ${free?'free':''} ${me.marked[i]?'marked':''} " data-bingo-cell="${i}" ${free||me.marked[i]||!hit||(!active&&!(r.status==='finished'&&r.canStillWin))?'disabled':''}>${free?'✳':String(n).padStart(2,'0')}</button>`}).join('')}</div><div class="bingo-ticket-foot"><span>PLAYER TICKET · 75 BALL</span><span>${drawn.length}/75</span></div></div></section>`:'<section class="bingo-card-panel"><div class="bingo-empty">ไม่พบการ์ดผู้เล่นในห้องนี้</div></section>';
  const owner=r.isHost;
- const remaining=Math.max(0,Math.ceil(((r.nextDrawAt||Date.now()+5000)-Date.now())/1000));
+ const remaining=Math.max(0,Math.ceil(((r.nextDrawAt||Date.now()+5000)-(Date.now()+bingoServerOffset))/1000));
  const remainingLabel=`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;
  return `<section class="bingo-shell"><div class="bingo-banner"><div><div class="bingo-eyebrow">✦ LOS SANTOS BINGO CLUB · ROOM ${String(r.id).slice(-5)}</div><h2>BINGO</h2><p>${esc(r.title)} · เจ้าของห้อง ${esc(r.hostName)}</p></div><div class="bingo-live">● ${r.status==='waiting'?'WAITING':active?'LIVE':'FINISHED'} · ${players.length} PLAYERS</div></div><div class="bingo-eventbar"><div><div class="bingo-event-kicker">✦ ${r.status==='waiting'?'ROOM LOBBY':active?'LIVE GAME':'GAME FINISHED'}</div><h3>${esc(r.title)}</h3><p>${r.status==='waiting'?'รอเจ้าของห้องกดเริ่มเกม':active?'ระบบสุ่มเลขอัตโนมัติทุก 5 วินาที':'เกมจบแล้ว'}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap">${owner&&r.status==='waiting'?'<button class="bingo-action" id="bingoStart">▶ เริ่มเกม</button>':''}<button class="bingo-create" id="bingoBack">← กลับหน้าห้อง</button>${me?'<button class="bingo-create" id="bingoLeave">ออกจากห้อง</button>':''}</div></div><div class="bingo-main"><div>${card}<section class="bingo-side-panel" style="margin-top:12px"><div class="bingo-panel-head"><div><h3>กระดานเลขที่ถูกเรียก</h3><div class="bingo-muted">NUMBER BOARD · 01–75</div></div><b>${drawn.length}/75</b></div><div class="bingo-number-grid">${numbers.map(n=>`<span class="bingo-number ">${String(n).padStart(2,'0')}</span>`).join('')}</div></section></div><aside><section class="bingo-side-panel"><div class="bingo-panel-head"><div><h3>สถานะห้อง</h3><div class="bingo-muted">ROOM STATUS</div></div><b>${r.status==='waiting'?'WAITING':active?'LIVE':'ENDED'}</b></div><div class="bingo-live-grid"><div class="bingo-stat-card"><div class="bingo-stat-label">เลขที่ออกแล้ว</div><div class="bingo-stat-value">${drawn.length}<small>/75</small></div></div><div class="bingo-stat-card"><div class="bingo-stat-label">ผู้เล่น</div><div class="bingo-stat-value">${players.length}</div></div></div><div class="bingo-call-box" style="margin-top:10px"><small>เลขล่าสุด · LAST CALL</small><div class="bingo-current-ball">${latest?String(latest).padStart(2,'0'):'—'}</div><b>${latest?ballLabel(latest)+' – '+String(latest).padStart(2,'0'):'รอเริ่มเกม'}</b><div class="bingo-countdown-wrap"><div class="bingo-countdown-ring" id="bingoCountdownRing" style="--progress:${active?((5-remaining)/5*360):0}deg"><strong id="bingoCountdown">${active?remainingLabel:'0:05'}</strong></div><span class="bingo-countdown-label">${active?'วินาที ก่อนสุ่มเลขถัดไป':'เริ่มนับเมื่อเริ่มเกม'}</span></div></div><p class="bingo-muted" style="text-align:center;margin:8px 0">${active?'สุ่มเลขอัตโนมัติทุก 5 วินาที':r.status==='waiting'?'รอเจ้าของห้องเริ่มเกม':'จบเกมแล้ว'}</p><div class="bingo-history-balls">${drawn.slice(-12).reverse().map(n=>`<span class="bingo-history-ball">${n}</span>`).join('')}</div>${winners.length?`<div class="bingo-winner">🏆 ผู้ชนะ${winners.length>1?'ทั้งหมด':''}:<br>${winners.map(w=>`${esc(w.name)} (${esc(w.line||'BINGO')})`).join('<br>')}</div>`:''}</section><section class="bingo-side-panel" style="margin-top:12px"><h3>สมาชิกในห้อง · ${players.length}</h3><div class="bingo-players">${players.map(p=>`<span class="bingo-player-chip">${esc(p.name)}${p.winner?' 🏆':''}</span>`).join('')}</div></section></aside></div></section>`;
 }
-function showBingoWinnerPopup(winners){if(!winners?.length)return;let el=document.getElementById('bingoWinnerOverlay');if(el)el.remove();el=document.createElement('div');el.id='bingoWinnerOverlay';el.className='bingo-winner-overlay';el.innerHTML=`<div class="bingo-winner-modal"><div style="font-size:48px">🏆</div><div class="bingo-eyebrow">LOS SANTOS BINGO CLUB</div><h2>BINGO!</h2><p>ขอแสดงความยินดีกับผู้ชนะ${winners.length>1?'ทุกคน':''}</p>${winners.map(w=>`<div class="bingo-winner-name">${esc(w.name)}<small style="display:block;font-size:12px">${esc(w.line||'BINGO')}</small></div>`).join('')}<button class="bingo-action" id="bingoWinnerClose" style="margin-top:14px">ปิด</button></div>`;document.body.appendChild(el);el.querySelector('#bingoWinnerClose').onclick=()=>el.remove();}
+function showBingoWinnerPopup(winners){if(!winners?.length)return;let el=document.getElementById('bingoWinnerOverlay');if(el)el.remove();el=document.createElement('div');el.id='bingoWinnerOverlay';el.className='bingo-winner-overlay';el.innerHTML=`<div class="bingo-winner-modal"><div style="font-size:48px">🏆</div><div class="bingo-eyebrow">LOS SANTOS BINGO CLUB</div><h2>BINGO!</h2><p>ขอแสดงความยินดีกับผู้ชนะ${winners.length>1?'ทุกคน':''}</p>${winners.map(w=>`<div class="bingo-winner-name">${esc(w.name)}<small style="display:block;font-size:12px">${esc(w.line||'BINGO')}</small></div>`).join('')}<button class="bingo-action" id="bingoWinnerClose" style="margin-top:14px">ปิด</button></div>`;document.body.appendChild(el);el.querySelector('#bingoWinnerClose').onclick=async()=>{el.remove();if(bingoState?.room?.id){try{await loadBingo();}catch(e){}}};}
 
 function updateBingoCountdown(){
  const r=bingoState?.room;if(!r||r.status!=='playing')return;
- const left=Math.max(0,Math.ceil(((r.nextDrawAt||Date.now()+5000)-Date.now())/1000));
+ const left=Math.max(0,Math.ceil(((r.nextDrawAt||Date.now()+5000)-(Date.now()+bingoServerOffset))/1000));
  const label=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
  const value=document.getElementById('bingoCountdown'),ring=document.getElementById('bingoCountdownRing');
  if(value)value.textContent=label;
@@ -472,12 +472,13 @@ async function loadBingo(roomId){
  const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
  const before=bingoState?JSON.stringify(bingoState):'';
  const previous=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
- const next=await api('/api/bingo'+q);bingoState=next;
+ const next=await api('/api/bingo'+q);if(Number.isFinite(next.serverNow))bingoServerOffset=next.serverNow-Date.now();if(Number.isFinite(next.room?.serverNow))bingoServerOffset=next.room.serverNow-Date.now();bingoState=next;
  const current=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
  const sig=current.map(w=>String(w.userId)).sort().join('|');
  const prevSig=previous.map(w=>String(w.userId)).sort().join('|');
- if(bingoHasLoadedOnce&&sig&&sig!==prevSig&&bingoState?.room?.status==='finished')showBingoWinnerPopup(current);
+ const myId=String(state?.user?.id??'');const iAmNewWinner=current.some(w=>String(w.userId)===myId)&&!previous.some(w=>String(w.userId)===myId);if(bingoHasLoadedOnce&&sig&&sig!==prevSig&&bingoState?.room?.status==='finished'&&iAmNewWinner)showBingoWinnerPopup(current);
  bingoHasLoadedOnce=true;
+ if(next.room?.status==='finished'&&!next.room?.canStillWin&&!current.some(w=>String(w.userId)===String(state?.user?.id))){bingoState={...next,room:null};}
  if(page==='bingo'&&before!==JSON.stringify(next))render();
 }
 async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.stringify(body)});await loadBingo(bingoState?.room?.id)}
@@ -500,7 +501,7 @@ function wire(){
    if(count){const n=Number((count.textContent||'0/25').split('/')[0])+1;count.textContent=`${n}/25`;}
    try{
     const out=await api(`/api/bingo/${encodeURIComponent(roomId)}/mark`,{method:'POST',body:JSON.stringify({index})});
-    if(out.winners?.length)await loadBingo(roomId);
+    if(out.winners?.length){await loadBingo(roomId);}
    }catch(e){
     b.classList.remove('marked');b.disabled=false;if(player.marked)player.marked[index]=false;
     if(count){const n=Math.max(1,Number((count.textContent||'1/25').split('/')[0])-1);count.textContent=`${n}/25`;}
@@ -627,13 +628,13 @@ setInterval(async()=>{
  if(!state||page!=='bingo')return;
  const roomId=bingoState?.room?.id,room=bingoState?.room;
  updateBingoCountdown();
- const now=Date.now();
+ const now=Date.now()+bingoServerOffset;
  if(roomId&&room?.status==='playing'&&now>=(room.nextDrawAt||0)&&!bingoTickInFlight){
   bingoTickInFlight=true;
   try{const out=await api(`/api/bingo/${encodeURIComponent(roomId)}/tick`,{method:'POST',body:'{}'});if(out.drawn||out.finished)await loadBingo(roomId);}
   catch(e){}finally{bingoTickInFlight=false;}
  }
- // Read-only sync keeps other players current without rebuilding an unchanged screen.
- if(now-bingoLastSync>=1500){bingoLastSync=now;try{await loadBingo(roomId)}catch(e){}}
-},250);
+ // Sync ทุก 1 วินาที; render เฉพาะเมื่อข้อมูลเปลี่ยนจริง
+ if(now-bingoLastSync>=1000){bingoLastSync=now;try{await loadBingo(roomId)}catch(e){}}
+},200);
 boot().catch(()=>{});
