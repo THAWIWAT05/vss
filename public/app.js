@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false;
-let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), reportData = null, auditData = null, auditRange = { from: '', to: '', q: '' }, reportRange = { from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'), to: new Date().toLocaleDateString('en-CA') };
-const pageNames = { dashboard:'ภาพรวม', reports:'รายงานและสถิติ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
+let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false;
+const pageNames = { dashboard:'ภาพรวม', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
 const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
@@ -11,27 +11,26 @@ function installReportsNav(){
  const first=document.querySelector('.nav-item[data-page="dashboard"]');
  if(!first)return;
  const nav=first.parentElement;
- const ensure=(key,label,icon)=>{
-  let btn=document.querySelector(`.nav-item[data-page="${key}"]`);
-  if(!btn){
-   btn=document.createElement('button');btn.className='nav-item';btn.dataset.page=key;
-   btn.innerHTML=`<span>${icon}</span><span>${label}</span>`;
-   btn.addEventListener('click',()=>{if(!isAdmin())return;page=key;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===btn));render();if(key==='reports')loadReports().catch(e=>toast(e.message));if(key==='audit')loadAudit().catch(e=>toast(e.message))});
-  }
-  return btn;
- };
- // ย้ายสองเมนูนี้ไปท้ายสุดของแถบเมนู โดยคงปุ่มเดิมและ event ไว้
- const auditBtn=ensure('audit','ประวัติการทำงาน','◷');
- const reportsBtn=ensure('reports','รายงานและสถิติ','▥');
- nav.append(auditBtn,reportsBtn);
+ document.querySelector('.nav-item[data-page="reports"]')?.remove();
+ let wheelBtn=document.querySelector('.nav-item[data-page="wheel"]');
+ if(!wheelBtn){
+  wheelBtn=document.createElement('button');wheelBtn.className='nav-item';wheelBtn.dataset.page='wheel';
+  wheelBtn.innerHTML='<span>🎡</span><span>วงล้อชื่อ</span>';
+  wheelBtn.addEventListener('click',()=>{if(!isAdmin())return;page='wheel';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===wheelBtn));render()});
+ }
+ const auditBtn=document.querySelector('.nav-item[data-page="audit"]');
+ if(auditBtn)nav.append(wheelBtn,auditBtn);else nav.append(wheelBtn);
 }
-function installReportStyles(){if($('#reportStyles'))return;const st=document.createElement('style');st.id='reportStyles';st.textContent=`
+function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
-.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.report-card{background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:16px;padding:18px;min-width:0}.report-card h3{margin:0 0 5px}.report-card .sub{color:var(--muted,#777);font-size:12px;margin-bottom:14px}
-.report-bars{display:grid;gap:11px}.report-bar{display:grid;grid-template-columns:minmax(65px,100px) 1fr 44px;gap:9px;align-items:center;font-size:13px}.report-track{height:11px;background:var(--soft,#eef1f5);border-radius:20px;overflow:hidden}.report-fill{height:100%;border-radius:20px;background:var(--accent,#64748b)}.report-number{text-align:right;font-variant-numeric:tabular-nums}
-.report-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.report-kpi{padding:14px;border:1px solid var(--line,#e5e7eb);border-radius:13px}.report-kpi small{display:block;color:var(--muted,#777)}.report-kpi b{font-size:23px}.report-table{width:100%;border-collapse:collapse}.report-table th,.report-table td{padding:9px;border-bottom:1px solid var(--line,#e5e7eb);text-align:left;font-size:13px}
-@media(max-width:760px){.report-grid{grid-template-columns:1fr}.report-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.report-toolbar .field{min-width:130px}}
-@media print{body *{visibility:hidden!important}#reportPrint,#reportPrint *{visibility:visible!important}#reportPrint{position:absolute;inset:0;width:100%;padding:18px;background:white;color:#111}.report-card,.report-kpi{break-inside:avoid;border:1px solid #ccc}.report-toolbar,.report-actions{display:none!important}}
+.wheel-layout{display:grid;grid-template-columns:minmax(280px,1.1fr) minmax(260px,.9fr);gap:18px;align-items:start}
+.wheel-stage{position:relative;width:min(100%,540px);margin:8px auto 18px;aspect-ratio:1}
+#wheelCanvas{width:100%;height:100%;display:block;border-radius:50%;transition:transform 5s cubic-bezier(.12,.72,.12,1);filter:drop-shadow(0 10px 18px rgba(0,0,0,.16))}
+.wheel-pointer{position:absolute;z-index:2;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:17px solid transparent;border-right:17px solid transparent;border-top:36px solid #ef4444;filter:drop-shadow(0 2px 3px #0004)}
+.wheel-hub{position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:62px;height:62px;border-radius:50%;background:var(--panel,#fff);border:6px solid #fff;box-shadow:0 2px 10px #0003;display:grid;place-items:center;font-size:23px}
+.wheel-controls{display:grid;gap:12px}.wheel-result{padding:16px;border:1px solid var(--line,#ddd);border-radius:14px;background:var(--soft,#f6f7f9);min-height:78px}.wheel-result strong{font-size:22px}.wheel-names{width:100%;min-height:145px;resize:vertical}
+.wheel-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.wheel-team{border:1px solid var(--line,#ddd);border-radius:12px;padding:12px}.wheel-team h4{margin:0 0 8px}.wheel-team p{margin:4px 0}
+@media(max-width:760px){.wheel-layout{grid-template-columns:1fr}.wheel-team-grid{grid-template-columns:1fr 1fr}}
 `;document.head.appendChild(st)}
 
 async function api(url, options={}) { const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'ดำเนินการไม่สำเร็จ'); return d; }
@@ -41,13 +40,13 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installReportsNav();installReportStyles();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','reports','audit','members','inventory','requests','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='attendance';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='attendance'))}await refresh()}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installReportsNav();installWheelStyles();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','requests','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='attendance';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='attendance'))}await refresh()}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge').textContent=state.summary.pendingRequests;$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
-document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='reports')loadReports().catch(e=>toast(e.message));if(page==='audit')loadAudit().catch(e=>toast(e.message))});
+document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,reports,audit,attendance,members,inventory,requests,deliveries,history};c.innerHTML=views[page]();wire();}
+function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,wheel,audit,attendance,members,inventory,requests,deliveries,history};c.innerHTML=views[page]();wire();}
 
 function stat(label,value,icon,sub){return `<div class="stat"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 
@@ -58,6 +57,59 @@ function dashboard(){
  const absent=todayRows.filter(a=>a.status==='absent').length;
  const leave=todayRows.filter(a=>a.status==='leave'||a.status==='business').length;
  return `<div class="hero"><div><div class="eyebrow">DAILY OPERATIONS / COMMAND CENTER</div><h3>ยินดีต้อนรับสู่ GANG CONTROL</h3><p>จัดการสมาชิก การเช็กชื่อ และทรัพย์สินของแก๊งได้จากที่เดียว</p></div><div class="hero-tag">● ระบบออนไลน์ · ${esc(state.today)}</div></div><div class="stats">${stat('สมาชิกที่ใช้งาน',active.length,'♙','รายชื่อในแก๊ง')}${stat('ไอเทมในคลัง',state.items.length,'▤','ประเภทไอเทม')}${stat('คำขอเบิกรอตรวจ',state.summary.pendingRequests,'⇄','รายการ')}${stat('ส่งของรอตรวจ',state.summary.pendingDeliveries,'⇧','รายการ')}</div><div class="quick-grid"><button class="quick" data-go="attendance"><span>◷</span><b>เช็กชื่อประจำวัน</b><small>16:30 · 20:30 · 23:50</small></button><button class="quick" data-go="requests"><span>⇄</span><b>จัดการคำขอเบิก</b><small>ตรวจสอบและอนุมัติไอเทม</small></button><button class="quick" data-go="deliveries"><span>⇧</span><b>ตรวจรับของ</b><small>รับของเข้าคลังจากสมาชิก</small></button></div><div class="grid2"><div class="panel"><div class="panel-head"><div><h3>สรุปเช็กชื่อวันนี้</h3><div class="panel-sub">รวมสถานะจากทั้ง 3 รอบ</div></div><button class="btn small" data-go="attendance">เปิดระบบเช็กชื่อ</button></div><div class="count-cards"><span>มา/มาสาย ${present}</span><span>ขาด ${absent}</span><span>ลา/ติดธุระ ${leave}</span></div><div class="muted-note" style="margin-top:14px">รอบเช็กชื่อ: 16:30 น. · 20:30 น. · 23:50 น.</div></div><div class="panel"><div class="panel-head"><div><h3>ไอเทมใกล้หมด</h3><div class="panel-sub">จำนวนคงเหลือต่ำกว่าค่าขั้นต่ำ</div></div></div>${state.items.filter(i=>i.qty<=i.min).map(i=>`<div class="history-item"><b>${esc(i.name)}</b><span class="pill yellow">เหลือ ${i.qty} ${esc(i.unit)}</span></div>`).join('')||'<div class="empty">ไม่มีไอเทมใกล้หมด</div>'}</div></div>`
+}
+
+
+function wheelNames(){
+ const raw=$('#wheelNamesInput')?.value || state.members.filter(m=>m.active).map(m=>m.name).join('\n');
+ return [...new Set(raw.split(/\r?\n|,/).map(x=>x.trim()).filter(Boolean))];
+}
+function drawWheel(names){
+ const canvas=$('#wheelCanvas');if(!canvas)return;
+ const size=700,ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;
+ const cx=size/2,cy=size/2,r=size/2-8,colors=['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#ca8a04','#475569'];
+ ctx.clearRect(0,0,size,size);
+ if(!names.length){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle='#e5e7eb';ctx.fill();ctx.fillStyle='#475569';ctx.font='bold 30px sans-serif';ctx.textAlign='center';ctx.fillText('เพิ่มรายชื่อก่อน',cx,cy);return}
+ const arc=Math.PI*2/names.length;
+ names.forEach((name,i)=>{
+  const start=-Math.PI/2+i*arc,end=start+arc;
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke();
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(start+arc/2);ctx.textAlign='right';ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(13,Math.min(25,300/names.length))}px sans-serif`;ctx.shadowColor='#0008';ctx.shadowBlur=3;
+  let label=name;if(label.length>19)label=label.slice(0,18)+'…';ctx.fillText(label,r-25,8);ctx.restore();
+ });
+ ctx.beginPath();ctx.arc(cx,cy,36,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#cbd5e1';ctx.lineWidth=5;ctx.stroke();
+}
+function wheel(){
+ if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงวงล้อชื่อ</div>';
+ const names=state.members.filter(m=>m.active).map(m=>m.name);
+ return `<div class="hero"><div><div class="eyebrow">RANDOM PICKER / TEAM SHUFFLE</div><h3>วงล้อสุ่มชื่อ</h3><p>สุ่มผู้โชคดีหรือจับฉลากแบ่งทีมจากรายชื่อสมาชิก</p></div><div class="hero-tag">สมาชิกที่ใช้งาน ${names.length} คน</div></div>
+ <div class="wheel-layout"><div class="panel"><div class="wheel-stage"><div class="wheel-pointer"></div><canvas id="wheelCanvas"></canvas><div class="wheel-hub">★</div></div><div class="toolbar" style="justify-content:center"><button class="btn primary" id="spinWheel">🎡 หมุนวงล้อสุ่ม 1 คน</button></div><div class="wheel-result" id="wheelResult" style="margin-top:14px">ผลการสุ่มจะแสดงที่นี่</div></div>
+ <div class="panel wheel-controls"><div><h3>รายชื่อผู้เข้าร่วม</h3><p class="muted-note">ระบบใส่สมาชิกที่ใช้งานอยู่ให้อัตโนมัติ สามารถแก้ไขรายชื่อได้</p><textarea id="wheelNamesInput" class="wheel-names">${esc(names.join('\n'))}</textarea><div class="toolbar" style="margin-top:8px"><button class="btn small" id="wheelReloadNames">ใช้รายชื่อสมาชิกปัจจุบัน</button><button class="btn small" id="wheelShuffleNames">สลับลำดับชื่อ</button></div></div>
+ <div class="field"><label>จำนวนทีมที่ต้องการแบ่ง</label><input id="wheelTeamCount" type="number" min="2" max="20" value="2"></div><button class="btn" id="wheelMakeTeams">⇄ สุ่มแบ่งทีม</button><div id="wheelTeamsResult"></div><p class="muted-note">การสุ่มเป็นการจัดฉลากในหน้านี้ ไม่แก้ไขข้อมูลสมาชิกหรือประวัติในระบบ</p></div></div>`;
+}
+function bindWheel(){
+ const names=wheelNames();drawWheel(names);
+ $('#wheelNamesInput')?.addEventListener('input',()=>{drawWheel(wheelNames());$('#wheelResult').textContent='รายชื่อเปลี่ยนแล้ว พร้อมสุ่ม'});
+ $('#wheelReloadNames')?.addEventListener('click',()=>{$('#wheelNamesInput').value=state.members.filter(m=>m.active).map(m=>m.name).join('\n');drawWheel(wheelNames());toast('โหลดรายชื่อสมาชิกปัจจุบันแล้ว')});
+ $('#wheelShuffleNames')?.addEventListener('click',()=>{const a=wheelNames();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}$('#wheelNamesInput').value=a.join('\n');drawWheel(a)});
+ $('#spinWheel')?.addEventListener('click',()=>{
+  const list=wheelNames();if(!list.length){toast('กรุณาเพิ่มรายชื่อก่อน');return}if(wheelBusy)return;
+  const chosen=Math.floor(Math.random()*list.length),arc=360/list.length,center=chosen*arc+arc/2;
+  const canvas=$('#wheelCanvas');wheelBusy=true;$('#spinWheel').disabled=true;$('#wheelResult').textContent='กำลังหมุน...';
+  canvas.style.transition='none';canvas.style.transform='rotate(0deg)';void canvas.offsetWidth;
+  const extra=360*6+(360-center);canvas.style.transition='transform 5s cubic-bezier(.12,.72,.12,1)';canvas.style.transform=`rotate(${extra}deg)`;wheelRotation=extra;
+  setTimeout(()=>{wheelBusy=false;$('#spinWheel').disabled=false;$('#wheelResult').innerHTML=`<span class="muted-note">🎉 ผู้โชคดีคือ</span><br><strong>${esc(list[chosen])}</strong>`;},5100);
+ });
+ $('#wheelMakeTeams')?.addEventListener('click',()=>{
+  const list=wheelNames(),count=Number($('#wheelTeamCount').value);
+  if(!list.length){toast('กรุณาเพิ่มรายชื่อก่อน');return}
+  if(!Number.isInteger(count)||count<2||count>20){toast('จำนวนทีมต้องอยู่ระหว่าง 2–20 ทีม');return}
+  if(count>list.length){toast('จำนวนทีมต้องไม่มากกว่าจำนวนสมาชิก');return}
+  for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
+  const teams=Array.from({length:count},()=>[]);list.forEach((name,i)=>teams[i%count].push(name));
+  $('#wheelTeamsResult').innerHTML=`<div class="wheel-team-grid">${teams.map((team,i)=>`<div class="wheel-team"><h4>ทีม ${i+1}</h4>${team.map(name=>`<p>${esc(name)}</p>`).join('')}</div>`).join('')}</div>`;
+  $('#wheelResult').textContent=`แบ่งสมาชิก ${list.length} คน ออกเป็น ${count} ทีมแล้ว`;
+ });
 }
 
 async function loadAudit(from=auditRange.from,to=auditRange.to,q=auditRange.q){auditRange={from,to,q};auditData=await api(`/api/audit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&q=${encodeURIComponent(q)}`);render()}
@@ -71,37 +123,6 @@ function audit(){
  <div class="panel"><div class="panel-head"><div><h3>รายการกิจกรรม</h3><div class="panel-sub">เรียงจากรายการล่าสุดไปเก่าสุด</div></div></div><div class="table-wrap"><table><thead><tr><th>วันและเวลา</th><th>ผู้กระทำ</th><th>การกระทำ</th><th>รายละเอียด</th></tr></thead><tbody>${rows.map(x=>`<tr><td style="white-space:nowrap">${esc(fmt(x.createdAt))}</td><td><b>${esc(x.actor||'-')}</b></td><td><span class="pill blue">${esc(x.action||'-')}</span></td><td>${esc(x.detail||'-')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">ไม่พบประวัติการทำงาน</td></tr>'}</tbody></table></div></div>`;
 }
 function exportAuditCsv(){if(!auditData)return;const rows=[['วันเวลา','ผู้กระทำ','การกระทำ','รายละเอียด'],...(auditData.logs||[]).map(x=>[x.createdAt,x.actor,x.action,x.detail])];const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});downloadBlob(blob,'gang-control-activity-log.csv')}
-
-function reportBar(label,value,max){const width=max?Math.max(0,Math.min(100,value/max*100)):0;return `<div class="report-bar"><span>${esc(label)}</span><div class="report-track"><div class="report-fill" style="width:${width}%"></div></div><b class="report-number">${Number(value||0).toLocaleString('th-TH')}</b></div>`}
-function reportKpi(label,value){return `<div class="report-kpi"><small>${esc(label)}</small><b>${Number(value||0).toLocaleString('th-TH')}</b></div>`}
-async function loadReports(from=reportRange.from,to=reportRange.to){reportRange={from,to};reportData=await api(`/api/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);render()}
-function reports(){
- if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงรายงาน</div>';
- if(!reportData)return `<div class="panel"><h3>รายงานและสถิติ</h3><p class="muted-note">กำลังโหลดข้อมูลรายงาน...</p></div>`;
- const d=reportData,a=d.attendance||[],counts={present:0,late:0,absent:0,leave:0,business:0};a.forEach(x=>{if(counts[x.status]!==undefined)counts[x.status]++});
- const maxStatus=Math.max(1,...Object.values(counts));
- const monthMap={};a.forEach(x=>{const m=String(x.date||'').slice(0,7);if(!m)return;monthMap[m]??={present:0,late:0,absent:0,leave:0,business:0};if(monthMap[m][x.status]!==undefined)monthMap[m][x.status]++});
- const months=Object.keys(monthMap).sort().slice(-8);const maxMonth=Math.max(1,...months.map(m=>Object.values(monthMap[m]).reduce((x,y)=>x+y,0)));
- const tasks=d.dailyTasks||[],cs=d.contributions||[],taskDue=tasks.reduce((n,t)=>n+Math.max(0,(d.members||[]).filter(m=>m.active).length*t.qty-cs.filter(c=>c.taskId===t.id).reduce((x,c)=>x+Number(c.qty||0),0)),0);
- const delivered=cs.reduce((n,c)=>n+Number(c.qty||0),0),withdrawn=(d.withdrawals||[]).reduce((n,x)=>n+Number(x.qty||0),0),pendingRequests=(d.requests||[]).filter(x=>x.status==='pending').length,pendingDeliveries=(d.deliveries||[]).filter(x=>x.status==='pending').length;
- const inventory=(d.items||[]).slice().sort((x,y)=>Number(y.qty)-Number(x.qty));
- const monthly=months.map(m=>`<div class="report-bar"><span>${m}</span><div class="report-track"><div class="report-fill" style="width:${Math.max(1,Object.values(monthMap[m]).reduce((x,y)=>x+y,0)/maxMonth*100)}%"></div></div><b class="report-number">${Object.values(monthMap[m]).reduce((x,y)=>x+y,0)}</b></div>`).join('')||'<div class="empty">ไม่มีข้อมูลในช่วงวันที่</div>';
- return `<div class="hero"><div><div class="eyebrow">ANALYTICS / EXPORT CENTER</div><h3>รายงานและสถิติ GANG CONTROL</h3><p>สรุปข้อมูลจากฐานข้อมูลตามช่วงวันที่ที่เลือก</p></div><div class="hero-tag">ข้อมูลจริงจากระบบ</div></div>
- <div class="panel report-toolbar"><div class="field"><label>ตั้งแต่วันที่</label><input id="reportFrom" type="date" value="${esc(reportRange.from)}"></div><div class="field"><label>ถึงวันที่</label><input id="reportTo" type="date" value="${esc(reportRange.to)}"></div><button class="btn primary" id="applyReportRange">แสดงรายงาน</button><button class="btn" id="reportThisMonth">เดือนนี้</button><button class="btn" id="reportAllTime">ทั้งหมด</button></div>
- <div id="reportPrint"><div class="report-kpis">${reportKpi('สมาชิกทั้งหมด',(d.members||[]).length)}${reportKpi('สมาชิกใช้งาน',(d.members||[]).filter(m=>m.active).length)}${reportKpi('รายการเช็กชื่อ',a.length)}${reportKpi('รายการส่งของ',tasks.length)}${reportKpi('ยอดส่งสะสม',delivered)}${reportKpi('ยอดเบิกออก',withdrawn)}${reportKpi('คำขอรอตรวจ',pendingRequests)}${reportKpi('ส่งของรอตรวจ',pendingDeliveries)}</div>
- <div class="report-grid" style="margin-top:16px"><div class="report-card"><h3>สถิติการเช็กชื่อ</h3><div class="sub">จำนวนครั้งในช่วงวันที่เลือก</div><div class="report-bars">${reportBar('มา',counts.present,maxStatus)}${reportBar('มาสาย',counts.late,maxStatus)}${reportBar('ขาด',counts.absent,maxStatus)}${reportBar('ลา',counts.leave,maxStatus)}${reportBar('ติดธุระ',counts.business,maxStatus)}</div></div>
- <div class="report-card"><h3>แนวโน้มเช็กชื่อรายเดือน</h3><div class="sub">จำนวนรายการเช็กชื่อรวมต่อเดือน (แสดงสูงสุด 8 เดือน)</div><div class="report-bars">${monthly}</div></div>
- <div class="report-card"><h3>สรุปการส่งของ</h3><div class="sub">จากรายการส่งของประจำวัน</div><div class="report-bars">${reportBar('ส่งแล้ว',delivered,Math.max(1,delivered+taskDue))}${reportBar('ยอดค้าง',taskDue,Math.max(1,delivered+taskDue))}${reportBar('รายการปิดวัน',tasks.filter(t=>t.closed).length,Math.max(1,tasks.length))}</div><p class="sub" style="margin-top:12px">ยอดค้างคำนวณจากจำนวนสมาชิกที่ใช้งาน × จำนวนที่กำหนด หักยอดส่งที่บันทึกแล้ว</p></div>
- <div class="report-card"><h3>คลังไอเทมปัจจุบัน</h3><div class="sub">ยอดคงเหลือ ณ เวลาที่เปิดรายงาน</div><div class="report-bars">${inventory.slice(0,8).map(i=>reportBar(i.name,Number(i.qty||0),Math.max(1,...inventory.map(x=>Number(x.qty||0))))).join('')||'<div class="empty">ไม่มีไอเทม</div>'}</div></div></div>
- <div class="report-card" style="margin-top:16px"><h3>รายละเอียดคลังไอเทม</h3><div class="table-wrap"><table class="report-table"><thead><tr><th>ไอเทม</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>ขั้นต่ำ</th><th>สถานะ</th></tr></thead><tbody>${inventory.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.category||'-')}</td><td>${Number(i.qty||0)} ${esc(i.unit||'')}</td><td>${Number(i.min||0)}</td><td>${Number(i.qty||0)<=Number(i.min||0)?'ใกล้หมด':'ปกติ'}</td></tr>`).join('')||'<tr><td colspan="5">ไม่มีข้อมูล</td></tr>'}</tbody></table></div></div></div>
- <div class="panel report-actions"><div class="panel-head"><div><h3>ส่งออกรายงาน</h3><div class="panel-sub">ข้อมูลที่ส่งออกจะใช้ช่วงวันที่เดียวกับตัวกรองด้านบน</div></div></div><div class="toolbar"><button class="btn primary" id="exportReportXlsx">ดาวน์โหลด Excel (.xlsx)</button><button class="btn" id="exportReportPng">ดาวน์โหลดกราฟ PNG</button><button class="btn" id="exportReportPdf">พิมพ์ / บันทึก PDF</button><button class="btn" id="exportReportCsv">ดาวน์โหลด CSV</button></div></div>`;
-}
-function csvCell(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
-function exportReportCsv(){if(!reportData)return;const d=reportData,rows=[['หมวด','วันที่','ชื่อ/รายการ','รายละเอียด','จำนวน','สถานะ']];(d.attendance||[]).forEach(x=>rows.push(['เช็กชื่อ',x.date,x.memberName,x.sessionLabel,x.status,statusNames[x.status]||x.status]));(d.contributions||[]).forEach(x=>rows.push(['ส่งของ',x.date,x.member,x.taskId,x.qty,x.complete?'ครบ':'']));(d.withdrawals||[]).forEach(x=>rows.push(['เบิกของ',String(x.createdAt||'').slice(0,10),x.item,x.reason,x.qty,'']));(d.deliveries||[]).forEach(x=>(x.items||[]).forEach(i=>rows.push(['ส่งของเข้าคลัง',String(x.createdAt||'').slice(0,10),x.member,i.name,i.qty,x.status])));const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});downloadBlob(blob,'gang-control-report.csv')}
-function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-async function loadExternalScript(src){return new Promise((resolve,reject)=>{if(document.querySelector(`script[src="${src}"]`)){resolve();return}const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.head.appendChild(s)})}
-async function exportReportXlsx(){if(!reportData)return;try{await loadExternalScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');const d=reportData,wb=XLSX.utils.book_new();const add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),name);add('สรุป',[['รายงาน GANG CONTROL'],['ตั้งแต่',reportRange.from],['ถึง',reportRange.to],['สมาชิกทั้งหมด',d.members.length],['เช็กชื่อ',d.attendance.length],['รายการส่งของ',d.dailyTasks.length]]);add('เช็กชื่อ',[['วันที่','สมาชิก','รอบ','เวลา','สถานะ','หมายเหตุ'],...d.attendance.map(x=>[x.date,x.memberName,x.sessionLabel,x.time,statusNames[x.status]||x.status,x.note||''])]);add('สมาชิก',[['ชื่อ','ยศ','สถานะ','วันที่เข้าร่วม'],...d.members.map(x=>[x.name,x.rank,x.active?'ใช้งาน':'นำออกแล้ว',x.joinedAt])]);add('คลังไอเทม',[['ไอเทม','หมวดหมู่','คงเหลือ','หน่วย','ขั้นต่ำ'],...d.items.map(x=>[x.name,x.category,x.qty,x.unit,x.min])]);add('ส่งของประจำวัน',[['วันที่','รายการ','กำหนดต่อคน','ปิดวัน'],...d.dailyTasks.map(x=>[x.date,x.name,x.qty,x.closed?'ปิด':'เปิด'])]);add('ยอดส่ง',[['วันที่','สมาชิก','รายการ','จำนวน','ครบ'],...d.contributions.map(x=>[x.date,x.member,x.taskId,x.qty,x.complete?'ครบ':''])]);add('เบิกของ',[['วันที่','ไอเทม','จำนวน','เหตุผล','ผู้เบิก'],...d.withdrawals.map(x=>[String(x.createdAt||'').slice(0,10),x.item,x.qty,x.reason,x.admin])]);add('ส่งเข้าคลัง',[['วันที่','สมาชิก','รายการ','จำนวน','สถานะ'],...d.deliveries.flatMap(x=>(x.items||[]).map(i=>[String(x.createdAt||'').slice(0,10),x.member,i.name,i.qty,x.status]))]);add('คำขอเบิก',[['วันที่','สมาชิก','ไอเทม','จำนวน','สถานะ'],...d.requests.map(x=>[String(x.createdAt||'').slice(0,10),x.member,x.item,x.qty,x.status])]);XLSX.writeFile(wb,'gang-control-report.xlsx')}catch(e){toast('โหลดเครื่องมือ Excel ไม่สำเร็จ กรุณาใช้ปุ่ม CSV แทน')}}
-function exportReportPng(){const d=reportData;if(!d)return;const a=d.attendance||[],counts=['present','late','absent','leave','business'].map(k=>a.filter(x=>x.status===k).length),labels=['มา','มาสาย','ขาด','ลา','ติดธุระ'],max=Math.max(1,...counts),canvas=document.createElement('canvas');canvas.width=1400;canvas.height=850;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1400,850);ctx.fillStyle='#111827';ctx.font='bold 36px sans-serif';ctx.fillText('GANG CONTROL · รายงานสถิติ',60,70);ctx.font='20px sans-serif';ctx.fillText(`ช่วงวันที่ ${reportRange.from||'ทั้งหมด'} ถึง ${reportRange.to||'ปัจจุบัน'}`,60,112);ctx.font='bold 26px sans-serif';ctx.fillText('สถิติการเช็กชื่อ',60,190);labels.forEach((label,i)=>{const y=250+i*95;ctx.fillStyle='#334155';ctx.font='22px sans-serif';ctx.fillText(label,60,y+25);ctx.fillStyle='#e2e8f0';ctx.fillRect(210,y,950,34);ctx.fillStyle='#64748b';ctx.fillRect(210,y,950*counts[i]/max,34);ctx.fillStyle='#111827';ctx.fillText(String(counts[i]),1180,y+25)});ctx.font='bold 24px sans-serif';ctx.fillText('สรุปข้อมูล',60,770);ctx.font='20px sans-serif';ctx.fillText(`สมาชิก ${d.members.length} คน  |  เช็กชื่อ ${a.length} รายการ  |  ส่งของ ${d.dailyTasks.length} รายการ  |  ไอเทม ${d.items.length} ประเภท`,60,810);canvas.toBlob(blob=>downloadBlob(blob,'gang-control-charts.png'))}
 
 function attendance(){
  if(!isAdmin())return `<div class="panel"><h3>ประวัติการเช็กชื่อของฉัน</h3><div class="table-wrap"><table><thead><tr><th>วันที่</th><th>เวลา</th><th>สถานะ</th><th>หมายเหตุ</th></tr></thead><tbody>${state.attendanceHistory.map(a=>`<tr><td>${a.date}</td><td>${a.time}</td><td><span class="pill ${statusClass[a.status]}">${statusNames[a.status]}</span></td><td>${esc(a.note||'-')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">ยังไม่มีประวัติ</td></tr>'}</tbody></table></div></div>`;
@@ -231,16 +252,10 @@ function history(){
 function openModal(title,html,onSubmit){const root=$('#modalRoot');root.innerHTML=`<div class="modal-back"><form class="modal"><h3>${title}</h3>${html}<div class="modal-actions"><button type="button" class="btn" data-close>ยกเลิก</button><button class="btn primary">บันทึก</button></div></form></div>`;root.querySelector('[data-close]').onclick=()=>root.innerHTML='';root.querySelector('.modal-back').onclick=e=>{if(e.target.classList.contains('modal-back'))root.innerHTML=''};root.querySelector('form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await onSubmit(data);root.innerHTML='';await refresh()}catch(err){toast(err.message)}}}
 
 function wire(){
+ if(page==='wheel')bindWheel();
  $('#applyAuditFilter')?.addEventListener('click',()=>{const from=$('#auditFrom').value,to=$('#auditTo').value,q=$('#auditQuery').value.trim();if(from&&to&&from>to){toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');return}loadAudit(from,to,q).catch(e=>toast(e.message))});
  $('#resetAuditFilter')?.addEventListener('click',()=>loadAudit('','','').catch(e=>toast(e.message)));
  $('#exportAuditCsv')?.addEventListener('click',exportAuditCsv);
- $('#applyReportRange')?.addEventListener('click',()=>{const from=$('#reportFrom').value,to=$('#reportTo').value;if(from&&to&&from>to){toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');return}loadReports(from,to).catch(e=>toast(e.message))});
- $('#reportThisMonth')?.addEventListener('click',()=>{const now=new Date(),from=new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString('en-CA'),to=now.toLocaleDateString('en-CA');loadReports(from,to).catch(e=>toast(e.message))});
- $('#reportAllTime')?.addEventListener('click',()=>loadReports('','').catch(e=>toast(e.message)));
- $('#exportReportXlsx')?.addEventListener('click',exportReportXlsx);
- $('#exportReportCsv')?.addEventListener('click',exportReportCsv);
- $('#exportReportPng')?.addEventListener('click',exportReportPng);
- $('#exportReportPdf')?.addEventListener('click',()=>window.print());
  // ค้นหาชื่อสมาชิก และกรองเฉพาะสมาชิกที่เคยขาด
  const historySearch = $('#historyMemberSearch');
  const absentFilterButton = $('#historyAbsentFilter');
@@ -300,7 +315,7 @@ function wire(){
 
  $('#withdrawItem')?.addEventListener('click',()=>openModal('เบิกของโดยแอดมิน',`<div class="form-grid"><div class="field wide"><label>เลือกไอเทม</label><select name="itemId" required>${state.items.map(i=>`<option value="${i.id}">${esc(i.name)} · คงเหลือ ${i.qty} ${esc(i.unit)}</option>`).join('')}</select></div><div class="field"><label>จำนวนที่เบิก</label><input name="qty" type="number" min="1" step="1" required></div><div class="field"><label>เหตุผล</label><input name="reason" placeholder="ระบุเหตุผล"></div></div>`,async d=>{await api('/api/withdrawals',{method:'POST',body:JSON.stringify(d)});toast('เบิกของออกจากคลังแล้ว')}));
 
- document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{page=b.dataset.go;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===page));render();if(page==='reports')loadReports().catch(e=>toast(e.message));if(page==='audit')loadAudit().catch(e=>toast(e.message))});
+ document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{page=b.dataset.go;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===page));render();if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
  document.querySelectorAll('[data-session]').forEach(b=>b.onclick=()=>{selectedSession=b.dataset.session;render()});
 
