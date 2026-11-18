@@ -1,18 +1,17 @@
 const $ = s => document.querySelector(s);
-let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), reportData = null, reportRange = { from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'), to: new Date().toLocaleDateString('en-CA') };
-const pageNames = { dashboard:'ภาพรวม', reports:'รายงานและสถิติ', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
+let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), reportData = null, auditData = null, auditRange = { from: '', to: '', q: '' }, reportRange = { from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA'), to: new Date().toLocaleDateString('en-CA') };
+const pageNames = { dashboard:'ภาพรวม', reports:'รายงานและสถิติ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
 const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function installReportsNav(){
- if(document.querySelector('[data-page="reports"]')) return;
  const first=document.querySelector('.nav-item[data-page="dashboard"]');
- if(!first) return;
- const btn=document.createElement('button');btn.className='nav-item';btn.dataset.page='reports';btn.innerHTML='<span>▥</span><span>รายงานและสถิติ</span>';
- first.insertAdjacentElement('afterend',btn);
- btn.addEventListener('click',()=>{if(!isAdmin())return;page='reports';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===btn));render();loadReports().catch(e=>toast(e.message))});
+ if(!first)return;
+ const add=(key,label,icon,afterKey)=>{if(document.querySelector(`[data-page="${key}"]`))return;const btn=document.createElement('button');btn.className='nav-item';btn.dataset.page=key;btn.innerHTML=`<span>${icon}</span><span>${label}</span>`;const anchor=document.querySelector(`[data-page="${afterKey}"]`)||first;anchor.insertAdjacentElement('afterend',btn);btn.addEventListener('click',()=>{if(!isAdmin())return;page=key;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===btn));render();if(key==='reports')loadReports().catch(e=>toast(e.message));if(key==='audit')loadAudit().catch(e=>toast(e.message))});};
+ add('reports','รายงานและสถิติ','▥','dashboard');
+ add('audit','ประวัติการทำงาน','◷','reports');
 }
 function installReportStyles(){if($('#reportStyles'))return;const st=document.createElement('style');st.id='reportStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
@@ -30,13 +29,13 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installReportsNav();installReportStyles();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','reports','members','inventory','requests','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='attendance';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='attendance'))}await refresh()}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installReportsNav();installReportStyles();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','reports','audit','members','inventory','requests','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='attendance';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='attendance'))}await refresh()}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge').textContent=state.summary.pendingRequests;$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
-document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='reports')loadReports().catch(e=>toast(e.message))});
+document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='reports')loadReports().catch(e=>toast(e.message));if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,reports,attendance,members,inventory,requests,deliveries,history};c.innerHTML=views[page]();wire();}
+function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,reports,audit,attendance,members,inventory,requests,deliveries,history};c.innerHTML=views[page]();wire();}
 
 function stat(label,value,icon,sub){return `<div class="stat"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 
@@ -48,6 +47,18 @@ function dashboard(){
  const leave=todayRows.filter(a=>a.status==='leave'||a.status==='business').length;
  return `<div class="hero"><div><div class="eyebrow">DAILY OPERATIONS / COMMAND CENTER</div><h3>ยินดีต้อนรับสู่ GANG CONTROL</h3><p>จัดการสมาชิก การเช็กชื่อ และทรัพย์สินของแก๊งได้จากที่เดียว</p></div><div class="hero-tag">● ระบบออนไลน์ · ${esc(state.today)}</div></div><div class="stats">${stat('สมาชิกที่ใช้งาน',active.length,'♙','รายชื่อในแก๊ง')}${stat('ไอเทมในคลัง',state.items.length,'▤','ประเภทไอเทม')}${stat('คำขอเบิกรอตรวจ',state.summary.pendingRequests,'⇄','รายการ')}${stat('ส่งของรอตรวจ',state.summary.pendingDeliveries,'⇧','รายการ')}</div><div class="quick-grid"><button class="quick" data-go="attendance"><span>◷</span><b>เช็กชื่อประจำวัน</b><small>16:30 · 20:30 · 23:50</small></button><button class="quick" data-go="requests"><span>⇄</span><b>จัดการคำขอเบิก</b><small>ตรวจสอบและอนุมัติไอเทม</small></button><button class="quick" data-go="deliveries"><span>⇧</span><b>ตรวจรับของ</b><small>รับของเข้าคลังจากสมาชิก</small></button></div><div class="grid2"><div class="panel"><div class="panel-head"><div><h3>สรุปเช็กชื่อวันนี้</h3><div class="panel-sub">รวมสถานะจากทั้ง 3 รอบ</div></div><button class="btn small" data-go="attendance">เปิดระบบเช็กชื่อ</button></div><div class="count-cards"><span>มา/มาสาย ${present}</span><span>ขาด ${absent}</span><span>ลา/ติดธุระ ${leave}</span></div><div class="muted-note" style="margin-top:14px">รอบเช็กชื่อ: 16:30 น. · 20:30 น. · 23:50 น.</div></div><div class="panel"><div class="panel-head"><div><h3>ไอเทมใกล้หมด</h3><div class="panel-sub">จำนวนคงเหลือต่ำกว่าค่าขั้นต่ำ</div></div></div>${state.items.filter(i=>i.qty<=i.min).map(i=>`<div class="history-item"><b>${esc(i.name)}</b><span class="pill yellow">เหลือ ${i.qty} ${esc(i.unit)}</span></div>`).join('')||'<div class="empty">ไม่มีไอเทมใกล้หมด</div>'}</div></div>`
 }
+
+async function loadAudit(from=auditRange.from,to=auditRange.to,q=auditRange.q){auditRange={from,to,q};auditData=await api(`/api/audit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&q=${encodeURIComponent(q)}`);render()}
+function audit(){
+ if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงประวัติการทำงาน</div>';
+ if(!auditData)return '<div class="panel"><h3>ประวัติการทำงาน</h3><p class="muted-note">กำลังโหลดข้อมูล...</p></div>';
+ const rows=auditData.logs||[];
+ return `<div class="hero"><div><div class="eyebrow">SYSTEM AUDIT / ACTIVITY LOG</div><h3>ประวัติการทำงานของระบบ</h3><p>ตรวจสอบว่าใครทำอะไร และทำเมื่อไหร่</p></div><div class="hero-tag">บันทึกสูงสุด 1,000 รายการล่าสุด</div></div>
+ <div class="panel report-toolbar"><div class="field"><label>ตั้งแต่วันที่</label><input id="auditFrom" type="date" value="${esc(auditRange.from)}"></div><div class="field"><label>ถึงวันที่</label><input id="auditTo" type="date" value="${esc(auditRange.to)}"></div><div class="field"><label>ค้นหาผู้กระทำ / การกระทำ / รายละเอียด</label><input id="auditQuery" value="${esc(auditRange.q)}" placeholder="เช่น Shadow, แก้ไขจำนวน, ลบสมาชิก"></div><button class="btn primary" id="applyAuditFilter">ค้นหา</button><button class="btn" id="resetAuditFilter">ทั้งหมด</button><button class="btn" id="exportAuditCsv">ส่งออก CSV</button></div>
+ <div class="stats">${stat('รายการที่พบ',rows.length,'◷','ตามตัวกรอง')}${stat('ผู้กระทำไม่ซ้ำ',new Set(rows.map(x=>x.actor)).size,'♙','บัญชีผู้ใช้งาน')}${stat('ประเภทการกระทำ',new Set(rows.map(x=>x.action)).size,'▤','รายการที่แตกต่างกัน')}${stat('ขีดจำกัดข้อมูล',auditData.limit||1000,'⌕','รายการล่าสุด')}</div>
+ <div class="panel"><div class="panel-head"><div><h3>รายการกิจกรรม</h3><div class="panel-sub">เรียงจากรายการล่าสุดไปเก่าสุด</div></div></div><div class="table-wrap"><table><thead><tr><th>วันและเวลา</th><th>ผู้กระทำ</th><th>การกระทำ</th><th>รายละเอียด</th></tr></thead><tbody>${rows.map(x=>`<tr><td style="white-space:nowrap">${esc(fmt(x.createdAt))}</td><td><b>${esc(x.actor||'-')}</b></td><td><span class="pill blue">${esc(x.action||'-')}</span></td><td>${esc(x.detail||'-')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">ไม่พบประวัติการทำงาน</td></tr>'}</tbody></table></div></div>`;
+}
+function exportAuditCsv(){if(!auditData)return;const rows=[['วันเวลา','ผู้กระทำ','การกระทำ','รายละเอียด'],...(auditData.logs||[]).map(x=>[x.createdAt,x.actor,x.action,x.detail])];const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});downloadBlob(blob,'gang-control-activity-log.csv')}
 
 function reportBar(label,value,max){const width=max?Math.max(0,Math.min(100,value/max*100)):0;return `<div class="report-bar"><span>${esc(label)}</span><div class="report-track"><div class="report-fill" style="width:${width}%"></div></div><b class="report-number">${Number(value||0).toLocaleString('th-TH')}</b></div>`}
 function reportKpi(label,value){return `<div class="report-kpi"><small>${esc(label)}</small><b>${Number(value||0).toLocaleString('th-TH')}</b></div>`}
@@ -205,6 +216,9 @@ function history(){
 function openModal(title,html,onSubmit){const root=$('#modalRoot');root.innerHTML=`<div class="modal-back"><form class="modal"><h3>${title}</h3>${html}<div class="modal-actions"><button type="button" class="btn" data-close>ยกเลิก</button><button class="btn primary">บันทึก</button></div></form></div>`;root.querySelector('[data-close]').onclick=()=>root.innerHTML='';root.querySelector('.modal-back').onclick=e=>{if(e.target.classList.contains('modal-back'))root.innerHTML=''};root.querySelector('form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await onSubmit(data);root.innerHTML='';await refresh()}catch(err){toast(err.message)}}}
 
 function wire(){
+ $('#applyAuditFilter')?.addEventListener('click',()=>{const from=$('#auditFrom').value,to=$('#auditTo').value,q=$('#auditQuery').value.trim();if(from&&to&&from>to){toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');return}loadAudit(from,to,q).catch(e=>toast(e.message))});
+ $('#resetAuditFilter')?.addEventListener('click',()=>loadAudit('','','').catch(e=>toast(e.message)));
+ $('#exportAuditCsv')?.addEventListener('click',exportAuditCsv);
  $('#applyReportRange')?.addEventListener('click',()=>{const from=$('#reportFrom').value,to=$('#reportTo').value;if(from&&to&&from>to){toast('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');return}loadReports(from,to).catch(e=>toast(e.message))});
  $('#reportThisMonth')?.addEventListener('click',()=>{const now=new Date(),from=new Date(now.getFullYear(),now.getMonth(),1).toLocaleDateString('en-CA'),to=now.toLocaleDateString('en-CA');loadReports(from,to).catch(e=>toast(e.message))});
  $('#reportAllTime')?.addEventListener('click',()=>loadReports('','').catch(e=>toast(e.message)));
@@ -259,7 +273,7 @@ function wire(){
 
  $('#withdrawItem')?.addEventListener('click',()=>openModal('เบิกของโดยแอดมิน',`<div class="form-grid"><div class="field wide"><label>เลือกไอเทม</label><select name="itemId" required>${state.items.map(i=>`<option value="${i.id}">${esc(i.name)} · คงเหลือ ${i.qty} ${esc(i.unit)}</option>`).join('')}</select></div><div class="field"><label>จำนวนที่เบิก</label><input name="qty" type="number" min="1" step="1" required></div><div class="field"><label>เหตุผล</label><input name="reason" placeholder="ระบุเหตุผล"></div></div>`,async d=>{await api('/api/withdrawals',{method:'POST',body:JSON.stringify(d)});toast('เบิกของออกจากคลังแล้ว')}));
 
- document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{page=b.dataset.go;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===page));render();if(page==='reports')loadReports().catch(e=>toast(e.message))});
+ document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{page=b.dataset.go;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===page));render();if(page==='reports')loadReports().catch(e=>toast(e.message));if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
  document.querySelectorAll('[data-session]').forEach(b=>b.onclick=()=>{selectedSession=b.dataset.session;render()});
 
