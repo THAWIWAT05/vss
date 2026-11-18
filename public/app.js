@@ -476,7 +476,7 @@ async function loadBingo(roomId){
  const current=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
  const sig=current.map(w=>String(w.userId)).sort().join('|');
  const prevSig=previous.map(w=>String(w.userId)).sort().join('|');
- const myId=String(state?.user?.id??'');const iAmNewWinner=current.some(w=>String(w.userId)===myId)&&!previous.some(w=>String(w.userId)===myId);if(bingoHasLoadedOnce&&sig&&sig!==prevSig&&bingoState?.room?.status==='finished'&&iAmNewWinner)showBingoWinnerPopup(current);
+ if(sig&&sig!==prevSig&&bingoState?.room?.status==='finished')showBingoWinnerPopup(current);
  bingoHasLoadedOnce=true;
  if(next.room?.status==='finished'&&!next.room?.canStillWin&&!current.some(w=>String(w.userId)===String(state?.user?.id))){bingoState={...next,room:null};}
  if(page==='bingo'&&before!==JSON.stringify(next))render();
