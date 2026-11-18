@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false;
-let state = null, werewolfState = null, werewolfPollBusy = false, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
+let state = null, werewolfState = null, werewolfPollBusy = false, werewolfLoadSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
 const pageNames = { dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
@@ -8,95 +8,39 @@ const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* GANG CONTROL CINEMATIC AUDIO ENGINE — real CC0 audio files + scene ambience */
+/* GANG CONTROL SOUND ENGINE — shared game sound effects (no voice) */
 const GCSound = (()=>{
- const defaults={enabled:true,volume:0.72,ambience:true,ambienceVolume:0.22};
+ const defaults={enabled:true,volume:0.65};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
- let unlocked=false, ambient=null, ambientKind='', ambientFadeTimer=null;
- const assets={
-  // Creature / horror events
-  wolf:'https://sfxmint.com/dl/werewolf-howl-05.mp3',
-  nightHowl:'https://sfxmint.com/dl/werewolf-howl-01.mp3',
-  wolfAttack:'https://sfxmint.com/dl/werewolf-howl-13.mp3',
-  kill:'https://sfxmint.com/dl/wolf-growl-03.mp3',
-  death:'https://sfxmint.com/dl/body-fall-01.mp3',
-  winWolf:'https://sfxmint.com/dl/werewolf-howl-07.mp3',
-  // Fantasy abilities / role actions
-  protect:'https://spritepilot.com/free-assets/sound-effects/magic/magic-shield.mp3',
-  seer:'https://spritepilot.com/free-assets/sound-effects/magic/curse.mp3',
-  witch:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
-  potion:'https://spritepilot.com/free-assets/sound-effects/magic/potion.mp3',
-  poison:'https://spritepilot.com/free-assets/sound-effects/magic/poison.mp3',
-  hunter:'https://sfxmint.com/dl/arrow-flyby-01.mp3',
-  hunterHit:'https://sfxmint.com/dl/arrow-impact-01.mp3',
-  shieldHit:'https://sfxmint.com/dl/shield-block-01.mp3',
-  jester:'https://sfxmint.com/dl/growth-bfe32e67e3de9719a78a5544-part-1-v2.mp3',
-  // Round cues
-  start:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  success:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  finish:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  dawn:'https://sfxmint.com/dl/horror-stinger-76.mp3',
-  bell:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  winVillage:'https://spritepilot.com/free-assets/sound-effects/magic/heal.mp3',
-  vote:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
-  voteResult:'https://spritepilot.com/free-assets/sound-effects/magic/curse.mp3',
-  lose:'https://sfxmint.com/dl/horror-stinger-76.mp3',
-  error:'https://spritepilot.com/free-assets/sound-effects/magic/poison.mp3',
-  join:'https://spritepilot.com/free-assets/sound-effects/magic/spell-cast.mp3',
-  // Continuous scene beds — CC0
-  ambienceNight:'https://sfxmint.com/dl/night-ambience-02.mp3',
-  ambienceDay:'https://sfxmint.com/dl/village-ambience-02.mp3'
- };
+ let ctx=null;
  const save=()=>{try{localStorage.setItem('gcSoundSettings',JSON.stringify(settings))}catch{}};
- function unlock(){unlocked=true;return Promise.resolve(true)}
- function play(kind='tap',opts={}){
-  if(!settings.enabled||settings.volume<=0)return Promise.resolve(false);
-  const url=assets[kind];if(!url)return Promise.resolve(false);
-  const audio=new Audio(url);audio.preload='auto';audio.volume=Math.max(0,Math.min(1,settings.volume*(opts.gain??1)));
-  if(opts.rate)audio.playbackRate=opts.rate;
-  return audio.play().then(()=>new Promise(resolve=>{audio.addEventListener('ended',()=>resolve(true),{once:true});audio.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(true),15000)})).catch(()=>false);
+ function tone(freq=660,duration=.11,type='sine',gain=.18,delay=0){
+  if(!settings.enabled||settings.volume<=0)return;
+  try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();const osc=ctx.createOscillator(),amp=ctx.createGain(),t=ctx.currentTime+delay;osc.type=type;osc.frequency.setValueAtTime(freq,t);amp.gain.setValueAtTime(.0001,t);amp.gain.exponentialRampToValueAtTime(Math.max(.001,gain*settings.volume),t+.012);amp.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(amp);amp.connect(ctx.destination);osc.start(t);osc.stop(t+duration+.02)}catch{}
  }
- async function sequence(items){for(const item of items){if(item.delay)await new Promise(r=>setTimeout(r,item.delay));await play(item.kind,{gain:item.gain??1});}}
- function stopAmbience(){
-  if(ambientFadeTimer){clearInterval(ambientFadeTimer);ambientFadeTimer=null;}
-  if(!ambient){ambientKind='';return;}
-  const old=ambient;ambient=null;ambientKind='';const from=old.volume;let step=0;
-  const timer=setInterval(()=>{step++;old.volume=Math.max(0,from*(1-step/8));if(step>=8){clearInterval(timer);try{old.pause();old.src=''}catch{}}},70);
- }
- function setAmbience(scene){
-  if(!settings.enabled||!settings.ambience||settings.ambienceVolume<=0||!unlocked||!['night','day'].includes(scene)){stopAmbience();return;}
-  if(ambientKind===scene&&ambient&&!ambient.paused)return;
-  stopAmbience();const url=assets[scene==='night'?'ambienceNight':'ambienceDay'];
-  const a=new Audio(url);a.loop=true;a.preload='auto';a.volume=0;ambient=a;ambientKind=scene;
-  a.play().then(()=>{let step=0;ambientFadeTimer=setInterval(()=>{step++;if(a!==ambient){clearInterval(ambientFadeTimer);return;}a.volume=Math.min(settings.ambienceVolume,settings.ambienceVolume*step/12);if(step>=12){clearInterval(ambientFadeTimer);ambientFadeTimer=null;}},90)}).catch(()=>{if(ambient===a){ambient=null;ambientKind='';}});
- }
- function update(patch){settings={...settings,...patch};save();if(!settings.enabled||!settings.ambience)stopAmbience();else if(ambient){ambient.volume=settings.ambienceVolume;}}
- async function testAll(){
+ function play(kind='tap'){
   if(!settings.enabled)return;
-  const seq=['wolf','wolfAttack','kill','death','protect','seer','witch','potion','poison','hunter','hunterHit','jester','bell','winWolf','winVillage','lose'];
-  for(const kind of seq){await play(kind);await new Promise(r=>setTimeout(r,220));}
+  const seq={tap:[[520,.055,'sine',.10,0]],start:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.13],[784,.2,'triangle',.18,.26]],tick:[[880,.045,'sine',.10,0]],draw:[[660,.08,'sine',.14,0],[880,.12,'sine',.14,.09]],success:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.12],[784,.12,'triangle',.16,.24],[1047,.28,'triangle',.18,.36]],error:[[330,.13,'sawtooth',.10,0],[247,.2,'sawtooth',.10,.14]],vote:[[440,.07,'sine',.12,0],[587,.1,'sine',.12,.09]],finish:[[784,.13,'triangle',.16,0],[988,.13,'triangle',.16,.14],[1175,.32,'triangle',.18,.28]],join:[[587,.08,'sine',.12,0],[784,.12,'sine',.13,.1]]};
+  (seq[kind]||seq.tap).forEach(a=>tone(...a));
  }
- function get(){return {...settings,unlocked,ambiencePlaying:!!ambient&&!ambient.paused}}
- return {play,sequence,testAll,update,get,unlock,setAmbience,stopAmbience};
+ function update(patch){settings={...settings,...patch};save();}
+ function get(){return {...settings}}
+ return {play,update,get};
 })();
 function installGCSoundUI(){
  if(document.getElementById('gcSoundDock'))return;
- const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียงเอฟเฟกต์ <span id="gcSoundValue">72%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><label>เสียงบรรยากาศฉาก <input id="gcAmbienceEnabled" type="checkbox"></label><label>ระดับเสียงบรรยากาศ <span id="gcAmbienceValue">22%</span></label><input id="gcAmbienceVolume" type="range" min="0" max="50" step="2"><small style="color:#94a3b8">กลางคืน: ป่ามืด จิ้งหรีด และลม · กลางวัน: หมู่บ้าน นก และเสียงผู้คน</small><button id="gcSoundTest">▶ ทดสอบเสียงทุกบทบาท</button><small id="gcSoundHint" style="color:#fbbf24">หากยังไม่มีเสียง ให้แตะปุ่มทดสอบเสียงหนึ่งครั้ง</small><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
+ const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundPanel select{width:100%;padding:8px;border-radius:8px;background:#1e293b;color:#fff;border:1px solid #475569}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">65%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><small style="color:#94a3b8">ใช้เฉพาะเสียงเอฟเฟกต์ ไม่มีเสียงพูดหรือเสียงสังเคราะห์</small><button id="gcSoundTest">ทดสอบเสียง</button><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
  document.body.appendChild(dock);
- const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcAmbienceEnabled').checked=s.ambience;$s('gcAmbienceVolume').value=Math.round(s.ambienceVolume*100);$s('gcAmbienceValue').textContent=Math.round(s.ambienceVolume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇';};
- $s('gcSoundToggle').onclick=async()=>{await GCSound.unlock();$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
- $s('gcSoundEnabled').onchange=async e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked){await GCSound.unlock();GCSound.play('start');if(werewolfState?.room?.phase)GCSound.setAmbience(werewolfState.room.phase)}};
+ const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇'};
+ $s('gcSoundToggle').onclick=()=>{$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
+ $s('gcSoundEnabled').onchange=e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked)GCSound.play('start')};
  $s('gcSoundVolume').oninput=e=>{const volume=Number(e.target.value)/100;GCSound.update({volume});$s('gcSoundValue').textContent=e.target.value+'%'};
- $s('gcAmbienceEnabled').onchange=e=>{GCSound.update({ambience:e.target.checked});if(e.target.checked&&werewolfState?.room?.phase)GCSound.setAmbience(werewolfState.room.phase);else GCSound.stopAmbience();};
- $s('gcAmbienceVolume').oninput=e=>{const ambienceVolume=Number(e.target.value)/100;GCSound.update({ambienceVolume});$s('gcAmbienceValue').textContent=e.target.value+'%'};
- $s('gcSoundTest').onclick=async()=>{await GCSound.unlock();$s('gcSoundHint').textContent='กำลังเล่นตัวอย่างเสียงเหตุการณ์และบทบาท…';await GCSound.testAll();$s('gcSoundHint').textContent='ทดสอบครบแล้ว หากไม่ได้ยินให้ตรวจอินเทอร์เน็ต ระดับเสียง และแท็บเบราว์เซอร์';};
- // Browser audio policies require a user gesture. Unlock on the first real interaction.
- const unlockOnce=()=>{GCSound.unlock();const phase=werewolfState?.room?.phase;if(phase==='night'||phase==='day')GCSound.setAmbience(phase);document.removeEventListener('pointerdown',unlockOnce,true);document.removeEventListener('keydown',unlockOnce,true);};
- document.addEventListener('pointerdown',unlockOnce,true);document.addEventListener('keydown',unlockOnce,true);
+ $s('gcSoundTest').onclick=()=>GCSound.play('success');
  document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!b.closest('#gcSoundDock'))GCSound.play('tap')},true);
  sync();
 }
+
 
 function installImpostorStyles(){if($('#impostorStyles'))return;const st=document.createElement('style');st.id='impostorStyles';st.textContent=`
 .im-shell{--im-bg:#0b1018;--im-panel:#121c29;--im-line:#25364a;background:radial-gradient(circle at 85% 0%,#233a55 0,#101a28 35%,#0a111b 75%);color:#eaf1f8;border:1px solid #29394c;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px #02081266}.im-hero{padding:27px 30px;background:linear-gradient(110deg,#101a28,#192b40 58%,#33243a);border-bottom:1px solid #34465b;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.im-kicker{font-size:10px;letter-spacing:3px;color:#8eb6d7;font-weight:900}.im-hero h2{font-size:clamp(34px,5vw,54px);letter-spacing:2px;margin:6px 0;color:#fff;font-weight:1000}.im-hero p{color:#b7c6d6;margin:0}.im-pill{padding:8px 12px;border:1px solid #52677e;background:#ffffff0d;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:1px}.im-body{padding:20px;display:grid;gap:16px}.im-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.im-panel{background:linear-gradient(145deg,#162333,#111b28);border:1px solid #2b3c50;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081233}.im-panel h3{margin:0 0 7px;color:#f1f6fb}.im-muted{font-size:12px;color:#9cafc1}.im-btn{border:1px solid #7193b2;background:linear-gradient(110deg,#477da7,#315c80);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.im-btn:disabled{opacity:.4;cursor:not-allowed}.im-btn.ghost{background:#172638;border-color:#40556b}.im-btn.red{background:linear-gradient(110deg,#b94b55,#87313c);border-color:#d16a72}.im-field{display:grid;gap:6px}.im-field label{font-size:11px;color:#9fb4c9;font-weight:800}.im-field input,.im-field select,.im-field textarea{width:100%;border:1px solid #40546b;background:#0d1723;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.im-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.im-code{font:900 20px ui-monospace,monospace;letter-spacing:4px;color:#9ed1f5}.im-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.im-player{padding:11px 12px;border:1px solid #31465b;border-radius:10px;background:#0e1926;font-size:13px}.im-player small{display:block;color:#8da4ba;margin-top:3px}.im-secret{padding:20px;border:1px solid #8a6c40;border-radius:14px;background:linear-gradient(130deg,#352c1c,#1e2530);text-align:center}.im-secret .word{font-size:clamp(26px,4vw,40px);font-weight:1000;color:#ffe2a6;letter-spacing:1px}.im-secret.im-bad{border-color:#9c4653;background:linear-gradient(130deg,#3a1e29,#1e2530)}.im-clues{display:grid;gap:8px}.im-clue{display:flex;gap:10px;padding:10px;border-radius:9px;background:#0d1824;border:1px solid #283b50}.im-clue b{color:#a9c9e4;min-width:100px}.im-vote{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px;border:1px solid #34485d;background:#0d1824;border-radius:10px}.im-rule{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;margin:10px 0}.im-rule span{width:28px;height:28px;border-radius:8px;background:#29445e;display:grid;place-items:center;font-weight:900;color:#b9dcf5}.im-result{text-align:center;padding:24px;border:1px solid #526b83;border-radius:14px;background:linear-gradient(135deg,#1d3044,#172130)}.im-result h2{font-size:30px;margin:6px 0}.im-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #2b3e52;border-radius:12px;background:#0e1926}.im-toast-note{padding:10px 12px;border-radius:10px;background:#1b3044;color:#c5dff3;font-size:12px}
@@ -632,71 +576,45 @@ document.querySelectorAll('[data-im-join]').forEach(b=>b.onclick=async()=>{try{a
 }
 
 
-async function loadWerewolf(roomId){
- roomId=roomId||localStorage.getItem('gcWerewolfRoom')||'';
+async function loadWerewolf(roomId,options={}){
+ // forceLobby ป้องกันการดึงห้องเก่าจาก localStorage กลับมาอีกหลังออกจากเกม
+ if(options.forceLobby){roomId='';localStorage.removeItem('gcWerewolfRoom');}
+ else if(roomId===undefined||roomId===null||roomId==='')roomId=localStorage.getItem('gcWerewolfRoom')||'';
+ const requestSeq=++werewolfLoadSeq;
  const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
  const before=werewolfState?JSON.stringify(werewolfState):'';
  const next=await api('/api/werewolf'+q);
+ // ถ้ามีคำขอใหม่กว่า (เช่น กดออกจากเกมระหว่างที่ polling ทำงาน) ทิ้งผลเก่า
+ if(requestSeq!==werewolfLoadSeq)return;
  const old=werewolfState?.room,now=next?.room;
- if(old&&now&&String(old.id)===String(now.id)){
-  if(old.phase!==now.phase){
-   if(now.phase==='night'){
-    GCSound.setAmbience('night');
-    GCSound.sequence([{kind:'nightHowl',gain:.82,delay:900}]);
-   }else if(now.phase==='day'){
-    GCSound.setAmbience('day');
-    GCSound.play('bell',{gain:.75});
-   }else if(now.phase==='vote'){
-    GCSound.play('vote',{gain:.65});
-   }else if(now.phase==='hunter_shot'){
-    GCSound.play('dawn',{gain:.55});
-   }else if(now.phase==='finished'){
-    GCSound.stopAmbience();
-    const role=now.me?.role;
-    const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?role==='wolf':now.winner==='village'?role!=='wolf'&&role!=='jester':false;
-    GCSound.sequence([{kind:'finish',gain:.65},{kind:now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose',gain:1,delay:650}]);
-   }
-  }
-  const oldNight=JSON.stringify(old.lastNight||null),newNight=JSON.stringify(now.lastNight||null);
-  if(newNight!==oldNight&&now.lastNight){
-   const killed=(now.lastNight.killed||[]).length>0;
-   const scene=[];
-   if(now.lastNight.wolfAttack || (!('wolfAttack' in now.lastNight)&&killed))scene.push({kind:'wolfAttack',gain:.9,delay:250});
-   if(now.lastNight.poisoned)scene.push({kind:'poison',gain:.8,delay:scene.length?450:250});
-   if(killed)scene.push({kind:'death',gain:.78,delay:scene.length?420:250});
-   if(scene.length)GCSound.sequence(scene);
-   if(now.lastNight.saved||now.lastNight.bodyguardSacrifice){GCSound.sequence([{kind:'protect',gain:.8,delay:scene.length?1500:250},{kind:'shieldHit',gain:.75,delay:350}]);}
-  }
-  const oldVote=JSON.stringify(old.lastVote||null),newVote=JSON.stringify(now.lastVote||null);
-  if(newVote!==oldVote&&now.lastVote){
-   if(now.lastVote.role==='ตัวตลก')GCSound.play('jester');
-   else if(now.lastVote.name){GCSound.sequence([{kind:'voteResult',gain:.8},{kind:'death',gain:.8,delay:300}]);}
-   else GCSound.play('voteResult');
-  }
-  if(old.me?.alive!==false&&now.me?.alive===false){
-   // Personal death cue after the shared kill scene, so it does not double-play the body-fall effect.
-   GCSound.sequence([{kind:'lose',gain:.72,delay:650}]);
-  }
-  if(!old.me?.role&&now.me?.role){const roleSound={wolf:'wolf',seer:'seer',witch:'witch',bodyguard:'protect',guardian:'protect',hunter:'hunter',jester:'jester',villager:'start'};GCSound.play(roleSound[now.me.role]||'start');}
-  if(JSON.stringify(old.me?.seerResult||null)!==JSON.stringify(now.me?.seerResult||null)&&now.me?.seerResult)GCSound.play('seer');
- }
- // On first room load after page refresh, restore the correct scene ambience without replaying story events.
- if(now&&(!old||String(old.id)!==String(now.id))){
-  if(now.phase==='night'||now.phase==='day')GCSound.setAmbience(now.phase);else GCSound.stopAmbience();
- }
- if(!now)GCSound.stopAmbience();
+ if(old&&now&&String(old.id)===String(now.id)&&old.phase!==now.phase){GCSound.play(now.phase==='finished'?'finish':'start');}
  werewolfState=next;
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
+}
+async function leaveWerewolfToMain(){
+ const roomId=werewolfState?.room?.id;
+ if(roomId){
+  await api(`/api/werewolf/${encodeURIComponent(roomId)}/leave`,{method:'POST',body:'{}'});
+ }
+ // ล้างสถานะห้องและ invalidate คำขอ polling เก่าก่อนกลับหน้าหลัก
+ localStorage.removeItem('gcWerewolfRoom');
+ ++werewolfLoadSeq;
+ werewolfState=null;
+ await loadWerewolf('',{forceLobby:true});
+ page='dashboard';
+ document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='dashboard'));
+ render();
+ toast('ออกจากเกมหมาป่าแล้ว');
 }
 async function werewolfPost(path,body={}){await api(path,{method:'POST',body:JSON.stringify(body)});await loadWerewolf(werewolfState?.room?.id);}
 function werewolf(){
  installGameScrollStyles();
  const rooms=werewolfState?.rooms||[],r=werewolfState?.room,players=r?.players||[],p=r?.me,phase=r?.phase;
- const phases={lobby:'ห้องรอผู้เล่น',night:'กลางคืน',day:'กลางวัน · อภิปราย',vote:'ลงคะแนน',hunter_shot:'นายพรานตอบโต้',finished:'จบเกม'};
+ const phases={lobby:'ห้องรอผู้เล่น',night:'กลางคืน',day:'กลางวัน · อภิปราย',vote:'ลงคะแนน',finished:'จบเกม'};
  const header=`<div class="ww-hero"><div><div class="ww-kicker">GANG CONTROL · SOCIAL DEDUCTION</div><h2>🐺 WEREWOLF</h2><p>หมู่บ้านที่เต็มไปด้วยความลับ ใครคือหมาป่าที่ซ่อนอยู่?</p></div><div class="ww-pill">● ${r?phases[phase]||phase:'PUBLIC LOBBY'}</div></div>`;
  const rules=`<section class="ww-panel"><h3>📜 วิธีเล่น</h3><div class="ww-rule"><span>1</span><div><b>รับบทบาทลับ</b><div class="ww-muted">หมาป่า ผู้หยั่งรู้ แม่มด และชาวบ้าน จะถูกสุ่มให้อัตโนมัติ</div></div></div><div class="ww-rule"><span>2</span><div><b>กลางคืน</b><div class="ww-muted">หมาป่าเลือกเหยื่อ ผู้หยั่งรู้ตรวจสอบหนึ่งคน แม่มดเลือกใช้ยาช่วยหรือยาพิษ</div></div></div><div class="ww-rule"><span>3</span><div><b>กลางวัน</b><div class="ww-muted">ทุกคนอภิปรายกันในเกม แล้วเจ้าของห้องกดเปิดโหวตเพื่อเลือกผู้ต้องสงสัย</div></div></div><div class="ww-rule"><span>4</span><div><b>เงื่อนไขชนะ</b><div class="ww-muted">ชาวบ้านชนะเมื่อกำจัดหมาป่าหมด · หมาป่าชนะเมื่อมีจำนวนเท่ากับหรือมากกว่าฝ่ายอื่น</div></div></div></section>`;
  if(!r)return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-grid"><section class="ww-panel"><div class="ww-kicker">CREATE YOUR VILLAGE</div><h3 style="font-size:22px">เปิดหมู่บ้านใหม่</h3><p class="ww-muted">รองรับ 4–16 คน · สุ่มบทบาทอัตโนมัติ · เล่นพร้อมกันแบบเรียลไทม์</p><div class="ww-field" style="margin:14px 0"><label>ชื่อห้อง</label><input id="wwTitle" maxlength="50" value="หมู่บ้านรัตติกาล"></div><button class="ww-btn" id="wwCreate">＋ สร้างห้องใหม่</button></section><section class="ww-panel"><div class="ww-kicker">HOW TO PLAY</div>${rules}</section></div><section class="ww-panel"><h3>เข้าร่วมด้วยรหัสห้อง</h3><div class="ww-muted">กรอกรหัส 6 หลักจากเจ้าของห้อง</div><div style="display:flex;gap:8px;margin-top:12px"><input id="wwJoinCode" inputmode="numeric" maxlength="6" placeholder="รหัสห้อง 6 หลัก" style="min-width:0;flex:1;border:1px solid #4a5a70;background:#101824;color:#fff;border-radius:9px;padding:11px"><button class="ww-btn" id="wwJoinCodeBtn">เข้าร่วม</button></div></section><section class="ww-panel"><div class="ww-room"><div><h3>หมู่บ้านที่เปิดอยู่</h3><div class="ww-muted">เลือกห้องที่ยังรอผู้เล่น</div></div><button class="ww-btn ghost" id="wwRefresh">↻ รีเฟรช</button></div><div style="display:grid;gap:9px;margin-top:13px">${rooms.map(x=>`<div class="ww-lobby-card"><div><b>${esc(x.title)}</b><div class="ww-muted">เจ้าของ ${esc(x.hostName)} · ${x.playerCount}/16 คน</div><div class="ww-code" style="font-size:14px">${esc(x.code)}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${werewolfState?.isAdmin?`<button class="ww-btn red" data-ww-delete="${esc(x.id)}">ลบห้อง</button>`:''}<button class="ww-btn" data-ww-join="${esc(x.id)}">เข้าร่วมห้อง</button></div></div>`).join('')||'<div class="ww-muted" style="padding:20px;text-align:center">ยังไม่มีหมู่บ้านที่เปิดอยู่</div>'}</div></section></div></section>`;
- const playerCards=players.map(x=>`<div class="ww-player ${x.alive?'':'ww-dead'}"><b>${esc(x.name)} ${String(x.userId)===String(r.hostId)?'👑':''}</b><small>${x.left?'↗ ออกจากเกม':x.alive?'● ยังมีชีวิต':'✕ ถูกกำจัด'}${x.role?' · '+esc(x.role):''}${phase==='vote'&&x.voted?' · โหวตแล้ว':''}</small></div>`).join('');
+ const playerCards=players.map(x=>`<div class="ww-player ${x.alive?'':'ww-dead'}"><b>${esc(x.name)} ${String(x.userId)===String(r.hostId)?'👑':''}</b><small>${x.left?'↗ ออกจากเกม':x.alive?'● ยังมีชีวิต':'✕ ถูกกำจัด'}${x.role?' · '+esc(x.role):''}${phase==='night'&&x.nightSubmitted?' · ส่งคำสั่งแล้ว':''}${phase==='vote'&&x.voted?' · โหวตแล้ว':''}</small></div>`).join('');
  const alive=players.filter(x=>x.alive);
  let roleCard='';
  if(p?.role){const role=p.role,labels={wolf:'🐺 หมาป่า',seer:'🔮 ผู้หยั่งรู้',witch:'🧙 แม่มด',villager:'🏡 ชาวบ้าน',bodyguard:'🛡️ บอดี้การ์ด',guardian:'✨ ผู้พิทักษ์',hunter:'🏹 นายพราน',jester:'🤡 ตัวตลก'};const desc={wolf:'คุณอยู่ฝ่ายหมาป่า เลือกเหยื่อร่วมกับหมาป่าคนอื่นในเวลากลางคืน',seer:'ทุกคืนคุณสามารถตรวจสอบได้หนึ่งคนว่าเป็นหมาป่าหรือไม่',witch:'คุณมียาช่วยชีวิต 1 ครั้ง และยาพิษ 1 ครั้ง ใช้ได้อย่างละหนึ่งครั้งตลอดเกม',villager:'ใช้การสังเกตและอภิปรายเพื่อค้นหาหมาป่าในหมู่บ้าน',bodyguard:'เลือกคุ้มกันผู้เล่นหนึ่งคนในแต่ละคืน หากคนนั้นถูกหมาป่าโจมตี คุณจะสละชีวิตแทน',guardian:'เลือกปกป้องผู้เล่นหนึ่งคนจากหมาป่า ห้ามปกป้องคนเดิมสองคืนติดกัน',hunter:'หากคุณถูกกำจัด ไม่ว่าจะกลางคืนหรือจากการโหวต คุณสามารถเลือกยิงผู้เล่นหนึ่งคนก่อนออกจากเกม',jester:'คุณชนะทันทีหากชาวบ้านโหวตคุณออกจากเกม'};roleCard=`<div class="ww-secret ${role==='wolf'?'wolf':''}"><div class="ww-kicker">YOUR SECRET ROLE</div><div class="role">${labels[role]||role}</div><p class="ww-muted">${desc[role]||''}</p>${role==='seer'&&p.seerResult?`<div class="ww-notice" style="margin-top:10px">ผลตรวจล่าสุด: <b>${esc(p.seerResult.targetName)}</b> ${p.seerResult.isWolf?'เป็นหมาป่า 🐺':'ไม่ใช่หมาป่า ✓'}</div>`:''}</div>`;}
@@ -711,13 +629,13 @@ function werewolf(){
   else if(p.role==='bodyguard'||p.role==='guardian')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อปกป้องคืนนี้</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="protect" data-target="${esc(x.userId)}"><b>${p.role==='bodyguard'?'🛡️':'✨'} ${esc(x.name)}</b><small>ปกป้องผู้เล่นคนนี้</small></button>`).join('')}</div>`;
   else if(p.role==='witch')action=`<div class="ww-muted">เลือกใช้ยาอย่างใดอย่างหนึ่ง หรือข้ามคืนนี้ · ยาแต่ละชนิดใช้ได้ครั้งเดียว</div><div class="ww-action-grid">${p.witchSaveUsed?'':`<button class="ww-action" data-ww-night="save" data-target="${esc(r.witchAttackTarget||'')}"><b>💚 ใช้ยาช่วยชีวิต</b><small>${r.witchAttackTarget?'ช่วยเหยื่อที่หมาป่าเลือก':'รอหมาป่าเลือกเหยื่อก่อน'}</small></button>`}${p.witchPoisonUsed?'':alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="poison" data-target="${esc(x.userId)}"><b>☠️ วางยาพิษ · ${esc(x.name)}</b><small>กำจัดผู้เล่นคนนี้</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ไม่ใช้ยา</b><small>ผ่านคืนนี้</small></button></div>`;
   else action='<div class="ww-notice">ชาวบ้านไม่มีคำสั่งในเวลากลางคืน รอให้รุ่งเช้า</div>';
-  stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌙</span><div><strong>กลางคืน · ทุกคนหลับตา</strong><div class="ww-muted">บทบาทพิเศษกำลังทำภารกิจอย่างลับ ๆ</div></div></div><div style="margin-top:14px"><h3>คำสั่งของคุณ</h3>${action}</div><div class="ww-muted" style="margin-top:12px">ผู้เล่นที่ส่งคำสั่งแล้ว: ${r.nightSubmittedCount||0}/${r.nightRequiredCount||0} บทบาท</div></div>`;
+  stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌙</span><div><strong>กลางคืน · ทุกคนหลับตา</strong><div class="ww-muted">บทบาทพิเศษกำลังทำภารกิจอย่างลับ ๆ</div></div></div><div style="margin-top:14px"><h3>คำสั่งของคุณ</h3>${action}</div><div class="ww-muted" style="margin-top:12px">ผู้เล่นที่ส่งคำสั่ง: ${players.filter(x=>x.alive&&x.nightSubmitted).length}/${players.filter(x=>x.alive&&['wolf','seer','witch','bodyguard','guardian'].includes(x.role)).length} บทบาท</div></div>`;
  }
  if(phase==='day')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌅</span><div><strong>รุ่งเช้า · วันที่ ${r.dayNumber}</strong><div class="ww-muted">ทุกคนตื่นขึ้นมาและอภิปรายว่าใครน่าสงสัย</div></div></div>${r.lastNight?.killed?.length?`<div class="ww-notice" style="margin-top:12px">เมื่อคืนมีผู้เสียชีวิต: <b>${r.lastNight.killed.map(esc).join(', ')}</b>${r.lastNight.saved?' · มีคนได้รับการช่วยชีวิต':''}</div>`:`<div class="ww-notice" style="margin-top:12px">เมื่อคืนไม่มีผู้เสียชีวิต</div>`}${r.lastVote?`<div class="ww-notice" style="margin-top:8px">${r.lastVote.name?`ผลโหวต: <b>${esc(r.lastVote.name)}</b> ถูกกำจัด · บทบาท ${esc(r.lastVote.role)}`:'ผลโหวตเสมอหรือไม่มีคะแนน · ไม่มีผู้ถูกกำจัด'}</div>`:''}${r.isHost?'<button class="ww-btn" id="wwOpenVote" style="margin-top:14px">🗳️ เปิดช่วงลงคะแนน</button>':'<div class="ww-muted" style="margin-top:14px">รอเจ้าของห้องเปิดช่วงลงคะแนน</div>'}</div>`;
  if(phase==='vote')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">⚖️</span><div><strong>ลงคะแนนประหาร · วันที่ ${r.dayNumber}</strong><div class="ww-muted">เลือกผู้เล่นที่คิดว่าเป็นหมาป่า โหวตได้หนึ่งครั้ง</div></div></div>${!p?.alive?'<div class="ww-notice" style="margin-top:12px">คุณถูกกำจัดแล้ว ไม่สามารถลงคะแนนได้</div>':p?.voted?'<div class="ww-notice" style="margin-top:12px">คุณลงคะแนนแล้ว รอผู้เล่นคนอื่น…</div>':`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-vote="${esc(x.userId)}"><b>⚖️ ${esc(x.name)}</b><small>โหวตประหาร</small></button>`).join('')}<button class="ww-action" data-ww-vote="skip"><b>ข้ามการโหวต</b><small>งดออกเสียง</small></button></div>`}<div class="ww-muted" style="margin-top:12px">ลงคะแนนแล้ว ${r.voteCount}/${r.aliveCount} คน</div></div>`;
  if(phase==='hunter_shot')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🏹</span><div><strong>นายพรานลั่นไกครั้งสุดท้าย</strong><div class="ww-muted">${esc(r.pendingHunterName||'นายพราน')} เลือกผู้เล่นหนึ่งคนเพื่อยิงก่อนออกจากเกม</div></div></div>${String(r.meId)===String(r.pendingHunterId||'')?`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-hunter="${esc(x.userId)}"><b>🏹 ${esc(x.name)}</b><small>ยิงผู้เล่นคนนี้</small></button>`).join('')}</div>`:'<div class="ww-notice">รอนายพรานเลือกเป้าหมาย…</div>'}</div>`;
- if(phase==='finished')stage=`<div class="ww-result"><div style="font-size:46px">${r.winner==='jester'?'🤡':r.winner==='village'?'🏆':'🐺'}</div><div class="ww-kicker">THE VILLAGE HAS FALLEN</div><h2>${r.winner==='jester'?'JESTER WINS':r.winner==='village'?'VILLAGE WINS':'WEREWOLVES WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><div class="ww-players" style="text-align:left;margin:16px 0">${(r.roleReveal||[]).map(x=>`<div class="ww-player"><b>${esc(x.name)}</b><small>${esc(x.role)} · ${x.alive?'รอดชีวิต':'ถูกกำจัด'}</small></div>`).join('')}</div>${r.isHost?'<button class="ww-btn" id="wwRematch">เริ่มเกมใหม่</button>':''}</div>`;
- return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${roleCard}${stage}<div class="ww-panel"><div class="ww-room"><h3>สมาชิกในหมู่บ้าน</h3><span class="ww-muted">${players.length} คน</span></div><div class="ww-players">${playerCards}</div></div></div></section>`;
+ if(phase==='finished')stage=`<div class="ww-result"><div style="font-size:46px">${r.winner==='jester'?'🤡':r.winner==='village'?'🏆':'🐺'}</div><div class="ww-kicker">THE VILLAGE HAS FALLEN</div><h2>${r.winner==='jester'?'JESTER WINS':r.winner==='village'?'VILLAGE WINS':'WEREWOLVES WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><div class="ww-players" style="text-align:left;margin:16px 0">${(r.roleReveal||[]).map(x=>`<div class="ww-player"><b>${esc(x.name)}</b><small>${esc(x.role)} · ${x.alive?'รอดชีวิต':'ถูกกำจัด'}</small></div>`).join('')}</div><div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap">${r.isHost?'<button class="ww-btn" id="wwRematch">เริ่มเกมใหม่</button>':''}<button class="ww-btn red" id="wwReturnMain">กลับหน้าหลัก</button></div></div>`;
+ return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${stage}<div class="ww-panel"><div class="ww-room"><h3>สมาชิกในหมู่บ้าน</h3><span class="ww-muted">${players.length} คน</span></div><div class="ww-players">${playerCards}</div></div></div></section>`;
 }
 function wireWerewolf(){
  $('#wwCreate')?.addEventListener('click',async()=>{try{const title=$('#wwTitle')?.value.trim()||'หมู่บ้านรัตติกาล';const out=await api('/api/werewolf/create',{method:'POST',body:JSON.stringify({title})});localStorage.setItem('gcWerewolfRoom',out.roomId);await loadWerewolf(out.roomId);toast('สร้างหมู่บ้านแล้ว แชร์รหัสให้เพื่อนได้เลย')}catch(e){toast(e.message)}});
@@ -731,9 +649,11 @@ function wireWerewolf(){
  updateRolePreview();
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`)}catch(e){toast(e.message)}});
- $('#wwExit')?.addEventListener('click',async()=>{try{if(!confirm('ต้องการออกจากเกมนี้ใช่หรือไม่?'))return;await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/leave`,{method:'POST',body:'{}'});localStorage.removeItem('gcWerewolfRoom');await loadWerewolf('')}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound,{gain:.82});await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.sequence([{kind:'hunter',gain:.9},{kind:'hunterHit',gain:.85,delay:400}]);await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
+ const exitWerewolf=async()=>{if(!confirm('ต้องการออกจากเกมหมาป่าและกลับหน้าหลักใช่หรือไม่?'))return;try{await leaveWerewolfToMain()}catch(e){toast(e.message)}};
+ $('#wwExit')?.addEventListener('click',exitWerewolf);
+ $('#wwReturnMain')?.addEventListener('click',exitWerewolf);
+ document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'';if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{type,targetId})}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{targetId:b.dataset.wwHunter})}catch(e){toast(e.message)}});
  $('#wwOpenVote')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/open-vote`)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-vote]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันคะแนนโหวตนี้? เปลี่ยนคะแนนไม่ได้'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/vote`,{targetId:b.dataset.wwVote})}catch(e){toast(e.message)}});
  $('#wwRematch')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/rematch`)}catch(e){toast(e.message)}});
