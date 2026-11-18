@@ -178,6 +178,68 @@ app.get('/api/data', auth, (req, res) => {
   });
 });
 
+// BINGO activity: one shared game persisted in the existing JSONB state.
+function makeBingoCard(){
+ const card=[];
+ for(let col=0;col<5;col++){
+  const min=col*15+1,max=min+14,nums=[];
+  while(nums.length<5){const n=Math.floor(Math.random()*(max-min+1))+min;if(!nums.includes(n))nums.push(n)}
+  for(let row=0;row<5;row++)card[row*5+col]=nums[row];
+ }
+ card[12]=null;return card;
+}
+function bingoLine(marked){
+ const lines=[];
+ for(let r=0;r<5;r++)lines.push(Array.from({length:5},(_,c)=>r*5+c));
+ for(let c=0;c<5;c++)lines.push(Array.from({length:5},(_,r)=>r*5+c));
+ lines.push([0,6,12,18,24],[4,8,12,16,20]);
+ const found=lines.find(line=>line.every(i=>marked[i]));
+ return found?(found.length===5?(found[0]===0&&found[1]===6?'แนวทแยง':'ครบ 5 ช่อง'):'BINGO'):null;
+}
+function bingoPublic(db,req){
+ const g=db.bingoGame||null;if(!g)return {game:null,player:null,players:[]};
+ const user=req.session.user;const player=g.players.find(p=>p.userId===user.id)||null;
+ return {game:{id:g.id,title:g.title,status:g.status,drawn:g.drawn,winner:g.winner,createdAt:g.createdAt},player:player?{card:player.card,marked:player.marked}:null,players:g.players.map(p=>({name:p.name,winner:!!(g.winner&&g.winner.userId===p.userId)}))};
+}
+app.get('/api/bingo',auth,(req,res)=>{const db=readDB();res.json(bingoPublic(db,req))});
+app.post('/api/bingo/create',auth,adminOnly,(req,res)=>{
+ const db=readDB(),title=String(req.body?.title||'GANG BINGO').trim().slice(0,60);
+ if(!title)return res.status(400).json({error:'กรุณาตั้งชื่อเกม'});
+ db.bingoGame={id:Date.now(),title,status:'active',drawn:[],players:[],winner:null,createdAt:isoNow()};
+ log(db,req.session.user.name,'สร้างเกม BINGO',title);writeDB(db);res.json({ok:true});
+});
+app.post('/api/bingo/join',auth,(req,res)=>{
+ const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'ไม่มีเกมที่เปิดรับผู้เล่น'});
+ if(g.players.some(p=>p.userId===req.session.user.id))return res.status(400).json({error:'คุณเข้าร่วมเกมนี้แล้ว'});
+ g.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});
+ log(db,req.session.user.name,'เข้าร่วมเกม BINGO',g.title);writeDB(db);res.json({ok:true});
+});
+app.post('/api/bingo/draw',auth,adminOnly,(req,res)=>{
+ const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'ไม่มีเกมที่กำลังเล่น'});
+ const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!g.drawn.includes(n));
+ if(!remaining.length)return res.status(400).json({error:'สุ่มเลขครบทั้ง 75 เลขแล้ว'});
+ const number=remaining[Math.floor(Math.random()*remaining.length)];g.drawn.push(number);log(db,req.session.user.name,'สุ่มเลข BINGO',`เลข ${number}`);writeDB(db);res.json({ok:true,number});
+});
+app.post('/api/bingo/mark',auth,(req,res)=>{
+ const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'เกมจบแล้วหรือยังไม่มีเกม'});
+ const p=g.players.find(x=>x.userId===req.session.user.id),index=Number(req.body?.index);
+ if(!p)return res.status(403).json({error:'กรุณาเข้าร่วมเกมก่อน'});
+ if(!Number.isInteger(index)||index<0||index>24||index===12)return res.status(400).json({error:'ตำแหน่งไม่ถูกต้อง'});
+ if(!g.drawn.includes(p.card[index]))return res.status(400).json({error:'เลขนี้ยังไม่ถูกสุ่ม'});
+ p.marked[index]=true;writeDB(db);res.json({ok:true});
+});
+app.post('/api/bingo/claim',auth,(req,res)=>{
+ const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'เกมจบแล้วหรือยังไม่มีเกม'});
+ const p=g.players.find(x=>x.userId===req.session.user.id);if(!p)return res.status(403).json({error:'กรุณาเข้าร่วมเกมก่อน'});
+ // Recompute marks from drawn numbers; the free center always counts.
+ p.marked=p.card.map((n,i)=>i===12||g.drawn.includes(n));
+ const lines=[];for(let r=0;r<5;r++)lines.push(Array.from({length:5},(_,c)=>r*5+c));for(let c=0;c<5;c++)lines.push(Array.from({length:5},(_,r)=>r*5+c));lines.push([0,6,12,18,24],[4,8,12,16,20]);
+ const winning=lines.find(line=>line.every(i=>p.marked[i]));if(!winning)return res.status(400).json({error:'ยังไม่ครบ 5 ช่องในแถว คอลัมน์ หรือแนวทแยง'});
+ const lineName=winning[0]===0&&winning[1]===6?'แนวทแยง':winning[0]===4&&winning[1]===8?'แนวทแยง':winning[0]<5?'แนวนอน':winning[0]%5===0?'แนวตั้ง':'BINGO';
+ g.winner={userId:p.userId,name:p.name,line:lineName,claimedAt:isoNow()};g.status='finished';log(db,p.name,'ชนะเกม BINGO',`${g.title} · ${lineName}`);writeDB(db);res.json({ok:true,line:lineName});
+});
+
+
 // Admin records attendance for each member in one of the three daily sessions.
 app.post('/api/attendance', auth, adminOnly, (req, res) => {
   const { memberId, sessionId, status, note } = req.body || {};
