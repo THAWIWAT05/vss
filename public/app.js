@@ -34,11 +34,22 @@ function installWheelStyles(){if($('#wheelStyles'))return;const st=document.crea
 .wheel-controls{display:grid;gap:16px}.wheel-controls h3{margin-bottom:6px}.wheel-result{padding:16px 18px;border:1px solid var(--line,#ddd);border-radius:16px;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(236,72,153,.07));min-height:78px;text-align:center}.wheel-result strong{font-size:24px;color:var(--text,#1e293b)}.wheel-names{width:100%;min-height:155px;resize:vertical;border-radius:14px;padding:12px;line-height:1.7}
 .wheel-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.wheel-team{border:1px solid var(--line,#ddd);border-radius:16px;padding:14px;background:var(--panel,#fff);box-shadow:0 5px 16px rgba(15,23,42,.05)}.wheel-team h4{margin:0 0 10px;display:flex;align-items:center;justify-content:space-between}.wheel-team .team-leader{padding:8px 10px;border-radius:10px;background:linear-gradient(100deg,rgba(245,158,11,.17),rgba(251,191,36,.08));font-weight:800;margin:0 0 8px}.wheel-team .team-member{padding:5px 2px;margin:0;border-bottom:1px dashed var(--line,#e2e8f0)}.wheel-team .team-member:last-child{border:0}
 .wheel-modal-back{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);backdrop-filter:blur(7px);display:grid;place-items:center;padding:20px;animation:wheelFade .2s ease}.wheel-winner-modal{position:relative;width:min(440px,100%);padding:34px 26px 26px;text-align:center;border-radius:26px;background:linear-gradient(145deg,#fff,#f5f3ff);color:#1e1b4b;box-shadow:0 25px 80px rgba(0,0,0,.35);animation:wheelPop .35s cubic-bezier(.2,.9,.3,1.2)}.wheel-winner-icon{font-size:56px;line-height:1.2}.wheel-winner-modal h2{font-size:25px;margin:12px 0 6px;color:#6d28d9}.wheel-winner-name{font-size:clamp(25px,6vw,36px);font-weight:900;overflow-wrap:anywhere;margin:16px 0;padding:14px;border-radius:16px;background:linear-gradient(100deg,#ede9fe,#fce7f3)}.wheel-winner-modal button{min-width:130px;border-radius:999px!important}@keyframes wheelFade{from{opacity:0}to{opacity:1}}@keyframes wheelPop{from{opacity:0;transform:translateY(18px) scale(.86)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Center-screen feedback popups */
+.gc-notice-back{position:fixed;inset:0;z-index:12000;display:grid;place-items:center;padding:18px;background:rgba(15,23,42,.48);backdrop-filter:blur(5px);animation:wheelFade .16s ease}
+.gc-notice{width:min(420px,100%);padding:25px 24px 20px;border-radius:22px;background:var(--panel,#fff);color:var(--text,#172033);box-shadow:0 24px 70px #0004;text-align:center;border:1px solid var(--line,#e2e8f0);animation:wheelPop .25s ease}
+.gc-notice-icon{font-size:38px;margin-bottom:8px}.gc-notice-message{font-size:16px;font-weight:700;line-height:1.55;overflow-wrap:anywhere}.gc-notice button{margin-top:18px;min-width:120px;border-radius:999px!important}
+.wheel-leader-modal{width:min(560px,100%);max-height:min(82vh,760px);overflow:auto;padding:24px;border-radius:24px;background:var(--panel,#fff);color:var(--text,#172033);box-shadow:0 25px 80px #0005;animation:wheelPop .3s ease}
+.wheel-leader-modal h2{margin:0 0 6px}.wheel-leader-row{display:grid;grid-template-columns:95px 1fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#e2e8f0)}.wheel-leader-row label{font-weight:800}.wheel-leader-row select{width:100%;min-width:0;padding:10px;border:1px solid var(--line,#cbd5e1);border-radius:11px;background:var(--panel,#fff);color:var(--text,inherit)}.wheel-leader-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media(max-width:760px){.wheel-layout{grid-template-columns:1fr}.wheel-team-grid{grid-template-columns:1fr 1fr}.wheel-stage{width:min(100%,460px)}}@media(max-width:430px){.wheel-team-grid{grid-template-columns:1fr}.wheel-stage{padding:7px}}
 `;document.head.appendChild(st)}
 
 async function api(url, options={}) { const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'ดำเนินการไม่สำเร็จ'); return d; }
-function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2600)}
+function toast(msg){
+ const root=$('#modalRoot');if(!root)return;
+ root.innerHTML=`<div class="gc-notice-back"><div class="gc-notice" role="alertdialog" aria-modal="true"><div class="gc-notice-icon">✦</div><div class="gc-notice-message">${esc(msg)}</div><button type="button" class="btn primary" id="gcNoticeOk">ตกลง</button></div></div>`;
+ const close=()=>{root.innerHTML=''};$('#gcNoticeOk').onclick=close;root.querySelector('.gc-notice-back').onclick=e=>{if(e.target.classList.contains('gc-notice-back'))close()};
+}
 function isAdmin(){return !!state?.isAdmin}
 
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
@@ -93,8 +104,17 @@ function showWheelWinner(name){
 function renderSavedTeams(){
  const target=$('#wheelTeamsResult');if(!target)return;
  if(!savedWheelTeams){target.innerHTML='';return}
- target.innerHTML=`<div class="wheel-team-grid">${savedWheelTeams.teams.map((team,i)=>`<div class="wheel-team"><h4><span>🛡️ ทีม ${i+1}</span><span class="muted-note">${team.members.length} คน</span></h4><p class="team-leader">👑 หัวหน้าทีม: ${esc(team.leader)}</p>${team.members.filter(n=>n!==team.leader).map(name=>`<p class="team-member">${esc(name)}</p>`).join('')||'<p class="muted-note">ไม่มีสมาชิกเพิ่มเติม</p>'}</div>`).join('')}</div>`;
+ target.innerHTML=`<div class="wheel-team-grid">${savedWheelTeams.teams.map((team,i)=>`<div class="wheel-team"><h4><span>🛡️ ทีม ${i+1}</span><span class="muted-note">${team.members.length} คน</span></h4><p class="team-leader">👑 หัวหน้าทีม: ${esc(team.leader)}</p>${team.members.filter(n=>n!==team.leader).map(name=>`<p class="team-member">${esc(name)}</p>`).join('')||'<p class="muted-note">ไม่มีสมาชิกเพิ่มเติม</p>'}</div>`).join('')}</div><div class="toolbar" style="margin-top:12px"><button type="button" class="btn small" id="wheelEditLeaders">✎ เปลี่ยนหัวหน้าทีม</button></div>`;
+ $('#wheelEditLeaders')?.addEventListener('click',()=>openLeaderPicker(savedWheelTeams.teams));
 }
+function openLeaderPicker(teams){
+ const root=$('#modalRoot');if(!root)return;
+ root.innerHTML=`<div class="wheel-modal-back"><form class="wheel-leader-modal"><div style="font-size:34px">👑</div><h2>กำหนดหัวหน้าทีม</h2><p class="muted-note">เลือกสมาชิกจากแต่ละทีมให้เป็นหัวหน้าทีมได้ด้วยตัวเอง</p>${teams.map((team,i)=>`<div class="wheel-leader-row"><label>ทีม ${i+1}</label><select name="leader${i}" required>${team.members.map(n=>`<option value="${esc(n)}" ${n===team.leader?'selected':''}>${esc(n)}</option>`).join('')}</select></div>`).join('')}<div class="wheel-leader-actions"><button type="button" class="btn" id="cancelLeaderPick">ยกเลิก</button><button type="submit" class="btn primary">ยืนยันหัวหน้าทีม</button></div></form></div>`;
+ $('#cancelLeaderPick').onclick=()=>root.innerHTML='';
+ root.querySelector('.wheel-modal-back').onclick=e=>{if(e.target.classList.contains('wheel-modal-back'))root.innerHTML=''};
+ root.querySelector('form').onsubmit=e=>{e.preventDefault();const data=new FormData(e.currentTarget);teams.forEach((team,i)=>team.leader=data.get(`leader${i}`));savedWheelTeams={...savedWheelTeams,teams,updatedAt:new Date().toISOString()};localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));root.innerHTML='';renderSavedTeams();toast('บันทึกหัวหน้าทีมเรียบร้อยแล้ว')};
+}
+
 function wheel(){
  if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงวงล้อชื่อ</div>';
  const names=state.members.filter(m=>m.active).map(m=>m.name);
@@ -127,9 +147,13 @@ function bindWheel(){
   if(count>list.length){toast('จำนวนทีมต้องไม่มากกว่าจำนวนสมาชิก');return}
   for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
   const teams=Array.from({length:count},()=>[]);list.forEach((name,i)=>teams[i%count].push(name));
-  savedWheelTeams={teams:teams.map(members=>{const leaderIndex=Math.floor(Math.random()*members.length);return {leader:members[leaderIndex],members}}),createdAt:new Date().toISOString()};
-  localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));renderSavedTeams();
-  $('#wheelResult').textContent=`แบ่งสมาชิก ${list.length} คน ออกเป็น ${count} ทีม พร้อมสุ่มหัวหน้าทีมแล้ว`;
+  const draftTeams=teams.map(members=>({leader:members[0],members}));
+  openLeaderPicker(draftTeams);
+  $('#wheelResult').textContent=`สุ่มแบ่งสมาชิก ${list.length} คน เป็น ${count} ทีมแล้ว กรุณาเลือกหัวหน้าทีม`;
+  // บันทึกผลทีมเมื่อผู้ใช้ยืนยันหัวหน้าทีมในหน้าต่างเลือกหัวหน้าเท่านั้น
+  const root=$('#modalRoot');const form=root?.querySelector('form');
+  if(form){form.onsubmit=e=>{e.preventDefault();const data=new FormData(e.currentTarget);draftTeams.forEach((team,i)=>team.leader=data.get(`leader${i}`));savedWheelTeams={teams:draftTeams,createdAt:new Date().toISOString()};localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));root.innerHTML='';renderSavedTeams();toast(`บันทึกผลแบ่งทีม ${count} ทีม พร้อมหัวหน้าทีมแล้ว`)}}
+
  });
 }
 
