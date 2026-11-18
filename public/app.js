@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false;
-let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false;
+let state = null, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
 const pageNames = { dashboard:'ภาพรวม', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', requests:'ระบบเบิกของ', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
@@ -23,14 +23,18 @@ function installReportsNav(){
 }
 function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
-.wheel-layout{display:grid;grid-template-columns:minmax(280px,1.1fr) minmax(260px,.9fr);gap:18px;align-items:start}
-.wheel-stage{position:relative;width:min(100%,540px);margin:8px auto 18px;aspect-ratio:1}
-#wheelCanvas{width:100%;height:100%;display:block;border-radius:50%;transition:transform 5s cubic-bezier(.12,.72,.12,1);filter:drop-shadow(0 10px 18px rgba(0,0,0,.16))}
-.wheel-pointer{position:absolute;z-index:2;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:17px solid transparent;border-right:17px solid transparent;border-top:36px solid #ef4444;filter:drop-shadow(0 2px 3px #0004)}
-.wheel-hub{position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:62px;height:62px;border-radius:50%;background:var(--panel,#fff);border:6px solid #fff;box-shadow:0 2px 10px #0003;display:grid;place-items:center;font-size:23px}
-.wheel-controls{display:grid;gap:12px}.wheel-result{padding:16px;border:1px solid var(--line,#ddd);border-radius:14px;background:var(--soft,#f6f7f9);min-height:78px}.wheel-result strong{font-size:22px}.wheel-names{width:100%;min-height:145px;resize:vertical}
-.wheel-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.wheel-team{border:1px solid var(--line,#ddd);border-radius:12px;padding:12px}.wheel-team h4{margin:0 0 8px}.wheel-team p{margin:4px 0}
-@media(max-width:760px){.wheel-layout{grid-template-columns:1fr}.wheel-team-grid{grid-template-columns:1fr 1fr}}
+.wheel-layout{display:grid;grid-template-columns:minmax(300px,1.08fr) minmax(280px,.92fr);gap:20px;align-items:start}
+.wheel-layout>.panel{border-radius:22px;box-shadow:0 12px 34px rgba(15,23,42,.08);border:1px solid var(--line,#e2e8f0)}
+.wheel-stage{position:relative;width:min(100%,560px);margin:12px auto 22px;aspect-ratio:1;padding:10px;border-radius:50%;background:conic-gradient(from 20deg,#fbbf24,#f97316,#ec4899,#8b5cf6,#3b82f6,#14b8a6,#fbbf24);box-shadow:0 16px 34px rgba(30,41,59,.18)}
+.wheel-stage:before{content:'';position:absolute;inset:5px;border:3px solid rgba(255,255,255,.9);border-radius:50%;pointer-events:none;z-index:1}
+#wheelCanvas{width:100%;height:100%;display:block;border-radius:50%;transition:transform 5.8s cubic-bezier(.12,.72,.12,1);filter:drop-shadow(0 8px 15px rgba(0,0,0,.2));background:#fff}
+.wheel-pointer{position:absolute;z-index:3;top:-7px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:19px solid transparent;border-right:19px solid transparent;border-top:42px solid #fbbf24;filter:drop-shadow(0 4px 5px #0005)}
+.wheel-hub{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);width:76px;height:76px;border-radius:50%;background:linear-gradient(145deg,#fff,#e2e8f0);border:7px solid #fff;box-shadow:0 5px 18px #0004;display:grid;place-items:center;font-size:30px;color:#7c3aed}
+.wheel-spin-btn{min-width:220px;padding:13px 25px!important;border-radius:999px!important;font-weight:800!important;font-size:16px!important;box-shadow:0 8px 20px rgba(99,102,241,.25)}
+.wheel-controls{display:grid;gap:16px}.wheel-controls h3{margin-bottom:6px}.wheel-result{padding:16px 18px;border:1px solid var(--line,#ddd);border-radius:16px;background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(236,72,153,.07));min-height:78px;text-align:center}.wheel-result strong{font-size:24px;color:var(--text,#1e293b)}.wheel-names{width:100%;min-height:155px;resize:vertical;border-radius:14px;padding:12px;line-height:1.7}
+.wheel-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.wheel-team{border:1px solid var(--line,#ddd);border-radius:16px;padding:14px;background:var(--panel,#fff);box-shadow:0 5px 16px rgba(15,23,42,.05)}.wheel-team h4{margin:0 0 10px;display:flex;align-items:center;justify-content:space-between}.wheel-team .team-leader{padding:8px 10px;border-radius:10px;background:linear-gradient(100deg,rgba(245,158,11,.17),rgba(251,191,36,.08));font-weight:800;margin:0 0 8px}.wheel-team .team-member{padding:5px 2px;margin:0;border-bottom:1px dashed var(--line,#e2e8f0)}.wheel-team .team-member:last-child{border:0}
+.wheel-modal-back{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);backdrop-filter:blur(7px);display:grid;place-items:center;padding:20px;animation:wheelFade .2s ease}.wheel-winner-modal{position:relative;width:min(440px,100%);padding:34px 26px 26px;text-align:center;border-radius:26px;background:linear-gradient(145deg,#fff,#f5f3ff);color:#1e1b4b;box-shadow:0 25px 80px rgba(0,0,0,.35);animation:wheelPop .35s cubic-bezier(.2,.9,.3,1.2)}.wheel-winner-icon{font-size:56px;line-height:1.2}.wheel-winner-modal h2{font-size:25px;margin:12px 0 6px;color:#6d28d9}.wheel-winner-name{font-size:clamp(25px,6vw,36px);font-weight:900;overflow-wrap:anywhere;margin:16px 0;padding:14px;border-radius:16px;background:linear-gradient(100deg,#ede9fe,#fce7f3)}.wheel-winner-modal button{min-width:130px;border-radius:999px!important}@keyframes wheelFade{from{opacity:0}to{opacity:1}}@keyframes wheelPop{from{opacity:0;transform:translateY(18px) scale(.86)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:760px){.wheel-layout{grid-template-columns:1fr}.wheel-team-grid{grid-template-columns:1fr 1fr}.wheel-stage{width:min(100%,460px)}}@media(max-width:430px){.wheel-team-grid{grid-template-columns:1fr}.wheel-stage{padding:7px}}
 `;document.head.appendChild(st)}
 
 async function api(url, options={}) { const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'ดำเนินการไม่สำเร็จ'); return d; }
@@ -61,44 +65,60 @@ function dashboard(){
 
 
 function wheelNames(){
- const raw=$('#wheelNamesInput')?.value || state.members.filter(m=>m.active).map(m=>m.name).join('\n');
+ const input=$('#wheelNamesInput');
+ const raw=input ? input.value : (localStorage.getItem('gangWheelNames') || state.members.filter(m=>m.active).map(m=>m.name).join('\n'));
  return [...new Set(raw.split(/\r?\n|,/).map(x=>x.trim()).filter(Boolean))];
 }
+function saveWheelNames(names){localStorage.setItem('gangWheelNames',names.join('\n'))}
 function drawWheel(names){
  const canvas=$('#wheelCanvas');if(!canvas)return;
- const size=700,ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;
- const cx=size/2,cy=size/2,r=size/2-8,colors=['#2563eb','#7c3aed','#db2777','#ea580c','#16a34a','#0891b2','#ca8a04','#475569'];
+ const size=800,ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;
+ const cx=size/2,cy=size/2,r=size/2-12,colors=['#4f46e5','#7c3aed','#db2777','#ea580c','#059669','#0891b2','#ca8a04','#2563eb','#9333ea','#0f766e'];
  ctx.clearRect(0,0,size,size);
- if(!names.length){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle='#e5e7eb';ctx.fill();ctx.fillStyle='#475569';ctx.font='bold 30px sans-serif';ctx.textAlign='center';ctx.fillText('เพิ่มรายชื่อก่อน',cx,cy);return}
+ if(!names.length){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle='#e2e8f0';ctx.fill();ctx.fillStyle='#475569';ctx.font='bold 32px sans-serif';ctx.textAlign='center';ctx.fillText('เพิ่มรายชื่อก่อน',cx,cy);return}
  const arc=Math.PI*2/names.length;
  names.forEach((name,i)=>{
   const start=-Math.PI/2+i*arc,end=start+arc;
-  ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke();
-  ctx.save();ctx.translate(cx,cy);ctx.rotate(start+arc/2);ctx.textAlign='right';ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(13,Math.min(25,300/names.length))}px sans-serif`;ctx.shadowColor='#0008';ctx.shadowBlur=3;
-  let label=name;if(label.length>19)label=label.slice(0,18)+'…';ctx.fillText(label,r-25,8);ctx.restore();
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();ctx.fillStyle=colors[i%colors.length];ctx.fill();ctx.strokeStyle='rgba(255,255,255,.95)';ctx.lineWidth=5;ctx.stroke();
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(start+arc/2);ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.font=`800 ${Math.max(12,Math.min(25,330/names.length))}px sans-serif`;ctx.shadowColor='#0009';ctx.shadowBlur=4;
+  let label=name;if(label.length>22)label=label.slice(0,21)+'…';ctx.fillText(label,r-32,0);ctx.restore();
  });
- ctx.beginPath();ctx.arc(cx,cy,36,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#cbd5e1';ctx.lineWidth=5;ctx.stroke();
+ ctx.beginPath();ctx.arc(cx,cy,43,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#fbbf24';ctx.lineWidth=8;ctx.stroke();
+}
+function showWheelWinner(name){
+ const root=$('#modalRoot');if(!root)return;
+ root.innerHTML=`<div class="wheel-modal-back"><div class="wheel-winner-modal"><div class="wheel-winner-icon">🏆</div><h2>ยินดีด้วย! ผู้โชคดีคือ</h2><div class="wheel-winner-name">${esc(name)}</div><p style="color:#64748b;margin:0 0 20px">ขอแสดงความยินดีกับผู้ที่ได้รับเลือกในครั้งนี้</p><button type="button" class="btn primary" id="closeWheelWinner">ตกลง</button></div></div>`;
+ const close=()=>root.innerHTML='';$('#closeWheelWinner').onclick=close;root.querySelector('.wheel-modal-back').onclick=e=>{if(e.target.classList.contains('wheel-modal-back'))close()};
+}
+function renderSavedTeams(){
+ const target=$('#wheelTeamsResult');if(!target)return;
+ if(!savedWheelTeams){target.innerHTML='';return}
+ target.innerHTML=`<div class="wheel-team-grid">${savedWheelTeams.teams.map((team,i)=>`<div class="wheel-team"><h4><span>🛡️ ทีม ${i+1}</span><span class="muted-note">${team.members.length} คน</span></h4><p class="team-leader">👑 หัวหน้าทีม: ${esc(team.leader)}</p>${team.members.filter(n=>n!==team.leader).map(name=>`<p class="team-member">${esc(name)}</p>`).join('')||'<p class="muted-note">ไม่มีสมาชิกเพิ่มเติม</p>'}</div>`).join('')}</div>`;
 }
 function wheel(){
  if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงวงล้อชื่อ</div>';
  const names=state.members.filter(m=>m.active).map(m=>m.name);
- return `<div class="hero"><div><div class="eyebrow">RANDOM PICKER / TEAM SHUFFLE</div><h3>วงล้อสุ่มชื่อ</h3><p>สุ่มผู้โชคดีหรือจับฉลากแบ่งทีมจากรายชื่อสมาชิก</p></div><div class="hero-tag">สมาชิกที่ใช้งาน ${names.length} คน</div></div>
- <div class="wheel-layout"><div class="panel"><div class="wheel-stage"><div class="wheel-pointer"></div><canvas id="wheelCanvas"></canvas><div class="wheel-hub">★</div></div><div class="toolbar" style="justify-content:center"><button class="btn primary" id="spinWheel">🎡 หมุนวงล้อสุ่ม 1 คน</button></div><div class="wheel-result" id="wheelResult" style="margin-top:14px">ผลการสุ่มจะแสดงที่นี่</div></div>
- <div class="panel wheel-controls"><div><h3>รายชื่อผู้เข้าร่วม</h3><p class="muted-note">ระบบใส่สมาชิกที่ใช้งานอยู่ให้อัตโนมัติ สามารถแก้ไขรายชื่อได้</p><textarea id="wheelNamesInput" class="wheel-names">${esc(names.join('\n'))}</textarea><div class="toolbar" style="margin-top:8px"><button class="btn small" id="wheelReloadNames">ใช้รายชื่อสมาชิกปัจจุบัน</button><button class="btn small" id="wheelShuffleNames">สลับลำดับชื่อ</button></div></div>
- <div class="field"><label>จำนวนทีมที่ต้องการแบ่ง</label><input id="wheelTeamCount" type="number" min="2" max="20" value="2"></div><button class="btn" id="wheelMakeTeams">⇄ สุ่มแบ่งทีม</button><div id="wheelTeamsResult"></div><p class="muted-note">การสุ่มเป็นการจัดฉลากในหน้านี้ ไม่แก้ไขข้อมูลสมาชิกหรือประวัติในระบบ</p></div></div>`;
+ const savedNames=localStorage.getItem('gangWheelNames');
+ const initial=savedNames!==null?savedNames:names.join('\n');
+ if(savedWheelTeams===null){try{savedWheelTeams=JSON.parse(localStorage.getItem('gangWheelTeams')||'null')}catch{savedWheelTeams=null}}
+ return `<div class="hero"><div><div class="eyebrow">RANDOM PICKER / TEAM SHUFFLE</div><h3>วงล้อสุ่มชื่อ</h3><p>สุ่มผู้โชคดีและจัดทีมพร้อมหัวหน้าทีมในคลิกเดียว</p></div><div class="hero-tag">สมาชิกที่ใช้งาน ${names.length} คน</div></div>
+ <div class="wheel-layout"><div class="panel"><div class="wheel-stage"><div class="wheel-pointer"></div><canvas id="wheelCanvas"></canvas><div class="wheel-hub">★</div></div><div class="toolbar" style="justify-content:center"><button class="btn primary wheel-spin-btn" id="spinWheel">🎡 หมุนวงล้อสุ่ม 1 คน</button></div><div class="wheel-result" id="wheelResult" style="margin-top:16px">พร้อมแล้ว! กดปุ่มเพื่อเริ่มหมุนวงล้อ</div></div>
+ <div class="panel wheel-controls"><div><h3>👥 รายชื่อผู้เข้าร่วม</h3><p class="muted-note">ใส่สมาชิกที่ใช้งานอยู่ให้อัตโนมัติ แก้ไขหรือลบชื่อได้ตามต้องการ</p><textarea id="wheelNamesInput" class="wheel-names">${esc(initial)}</textarea><div class="toolbar" style="margin-top:9px"><button class="btn small" id="wheelReloadNames">โหลดรายชื่อสมาชิก</button><button class="btn small" id="wheelShuffleNames">สลับลำดับชื่อ</button><button class="btn small danger" id="wheelClearAll">ล้างรายชื่อ/ทีม</button></div></div>
+ <div class="field"><label>จำนวนทีมที่ต้องการแบ่ง (2–20 ทีม)</label><input id="wheelTeamCount" type="number" min="2" max="20" value="${savedWheelTeams?.teams?.length||2}"></div><button class="btn primary" id="wheelMakeTeams">⇄ สุ่มแบ่งทีม + เลือกหัวหน้าทีม</button><div id="wheelTeamsResult"></div><p class="muted-note">ผลการแบ่งทีมและหัวหน้าทีมจะถูกบันทึกไว้ในเบราว์เซอร์ จนกว่าจะกด “ล้างรายชื่อ/ทีม”</p></div></div>`;
 }
 function bindWheel(){
- const names=wheelNames();drawWheel(names);
- $('#wheelNamesInput')?.addEventListener('input',()=>{drawWheel(wheelNames());$('#wheelResult').textContent='รายชื่อเปลี่ยนแล้ว พร้อมสุ่ม'});
- $('#wheelReloadNames')?.addEventListener('click',()=>{$('#wheelNamesInput').value=state.members.filter(m=>m.active).map(m=>m.name).join('\n');drawWheel(wheelNames());toast('โหลดรายชื่อสมาชิกปัจจุบันแล้ว')});
- $('#wheelShuffleNames')?.addEventListener('click',()=>{const a=wheelNames();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}$('#wheelNamesInput').value=a.join('\n');drawWheel(a)});
+ const names=wheelNames();saveWheelNames(names);drawWheel(names);renderSavedTeams();
+ $('#wheelNamesInput')?.addEventListener('input',()=>{const a=wheelNames();saveWheelNames(a);drawWheel(a);$('#wheelResult').textContent='รายชื่อเปลี่ยนแล้ว พร้อมสุ่ม'});
+ $('#wheelReloadNames')?.addEventListener('click',()=>{const a=state.members.filter(m=>m.active).map(m=>m.name);$('#wheelNamesInput').value=a.join('\n');saveWheelNames(a);drawWheel(a);toast('โหลดรายชื่อสมาชิกปัจจุบันแล้ว')});
+ $('#wheelShuffleNames')?.addEventListener('click',()=>{const a=wheelNames();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}$('#wheelNamesInput').value=a.join('\n');saveWheelNames(a);drawWheel(a)});
+ $('#wheelClearAll')?.addEventListener('click',()=>{if(!confirm('ต้องการล้างรายชื่อและผลการแบ่งทีมทั้งหมดใช่หรือไม่?'))return;localStorage.removeItem('gangWheelNames');localStorage.removeItem('gangWheelTeams');savedWheelTeams=null;$('#wheelNamesInput').value='';drawWheel([]);$('#wheelTeamsResult').innerHTML='';$('#wheelResult').textContent='ล้างรายชื่อและผลการแบ่งทีมแล้ว'});
  $('#spinWheel')?.addEventListener('click',()=>{
   const list=wheelNames();if(!list.length){toast('กรุณาเพิ่มรายชื่อก่อน');return}if(wheelBusy)return;
   const chosen=Math.floor(Math.random()*list.length),arc=360/list.length,center=chosen*arc+arc/2;
-  const canvas=$('#wheelCanvas');wheelBusy=true;$('#spinWheel').disabled=true;$('#wheelResult').textContent='กำลังหมุน...';
+  const canvas=$('#wheelCanvas');wheelBusy=true;$('#spinWheel').disabled=true;$('#wheelResult').textContent='🎡 กำลังหมุน...';
   canvas.style.transition='none';canvas.style.transform='rotate(0deg)';void canvas.offsetWidth;
-  const extra=360*6+(360-center);canvas.style.transition='transform 5s cubic-bezier(.12,.72,.12,1)';canvas.style.transform=`rotate(${extra}deg)`;wheelRotation=extra;
-  setTimeout(()=>{wheelBusy=false;$('#spinWheel').disabled=false;$('#wheelResult').innerHTML=`<span class="muted-note">🎉 ผู้โชคดีคือ</span><br><strong>${esc(list[chosen])}</strong>`;},5100);
+  const extra=360*7+(360-center);canvas.style.transition='transform 5.8s cubic-bezier(.12,.72,.12,1)';canvas.style.transform=`rotate(${extra}deg)`;wheelRotation=extra;
+  setTimeout(()=>{wheelBusy=false;$('#spinWheel').disabled=false;$('#wheelResult').innerHTML=`<span class="muted-note">🏆 ผู้โชคดีคือ</span><br><strong>${esc(list[chosen])}</strong>`;showWheelWinner(list[chosen])},5900);
  });
  $('#wheelMakeTeams')?.addEventListener('click',()=>{
   const list=wheelNames(),count=Number($('#wheelTeamCount').value);
@@ -107,8 +127,9 @@ function bindWheel(){
   if(count>list.length){toast('จำนวนทีมต้องไม่มากกว่าจำนวนสมาชิก');return}
   for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[list[i],list[j]]=[list[j],list[i]]}
   const teams=Array.from({length:count},()=>[]);list.forEach((name,i)=>teams[i%count].push(name));
-  $('#wheelTeamsResult').innerHTML=`<div class="wheel-team-grid">${teams.map((team,i)=>`<div class="wheel-team"><h4>ทีม ${i+1}</h4>${team.map(name=>`<p>${esc(name)}</p>`).join('')}</div>`).join('')}</div>`;
-  $('#wheelResult').textContent=`แบ่งสมาชิก ${list.length} คน ออกเป็น ${count} ทีมแล้ว`;
+  savedWheelTeams={teams:teams.map(members=>{const leaderIndex=Math.floor(Math.random()*members.length);return {leader:members[leaderIndex],members}}),createdAt:new Date().toISOString()};
+  localStorage.setItem('gangWheelTeams',JSON.stringify(savedWheelTeams));renderSavedTeams();
+  $('#wheelResult').textContent=`แบ่งสมาชิก ${list.length} คน ออกเป็น ${count} ทีม พร้อมสุ่มหัวหน้าทีมแล้ว`;
  });
 }
 
