@@ -314,7 +314,7 @@ function wwResolveNight(room){
  }
  if(action.type==='poison'&&action.targetId&&!killed.includes(String(action.targetId)))killed.push(String(action.targetId));
  killed.forEach(id=>{const p=room.players.find(x=>String(x.userId)===String(id));if(p&&p.alive){p.alive=false;p.deathReason='night';}});
- room.lastNight={killed:killed.map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice};
+ room.lastNight={killed:killed.map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice,wolfAttack:!!wolfTarget,poisoned:action.type==='poison'&&!!action.targetId&&killed.includes(String(action.targetId))};
  if(guardian?.nightAction?.targetId)room.lastProtectedId=String(guardian.nightAction.targetId);
  room.players.forEach(p=>{p.nightAction=null;p.voted=null;});
  const fallenHunter=room.players.find(p=>p.role==='hunter'&&!p.alive&&p.deathReason==='night'&&!p.hunterShotUsed);
