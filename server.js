@@ -338,7 +338,7 @@ function wwPublic(room,req){
   nightReady:room.phase==='night'?wwNightReady(room):false,
   pendingHunterId:room.phase==='hunter_shot'?room.pendingHunterId:null,pendingHunterName:room.phase==='hunter_shot'?room.players.find(p=>String(p.userId)===String(room.pendingHunterId))?.name:null,
   voteCount:alive.filter(p=>p.voted).length,
-  lastNight:room.phase==='day'||room.phase==='vote'||room.phase==='finished'?room.lastNight||null:null,
+  lastNight:room.phase==='day'||room.phase==='vote'||room.phase==='hunter_shot'||room.phase==='finished'?room.lastNight||null:null,
   lastVote:room.phase==='night'||room.phase==='day'||room.phase==='vote'||room.phase==='finished'?room.lastVote||null:null,
   witchAttackTarget:me?.role==='witch'?witchAttackTarget:null,
   winner:room.winner,resultText:room.resultText,
