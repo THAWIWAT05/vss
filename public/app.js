@@ -8,15 +8,15 @@ const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}) : '-';
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* GANG CONTROL SOUND ENGINE — shared game effects + voice */
+/* GANG CONTROL SOUND ENGINE — shared game sound effects (no voice) */
 const GCSound = (()=>{
- const defaults={enabled:true,volume:0.65,mode:'all'};
+ const defaults={enabled:true,volume:0.65};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
  let ctx=null;
  const save=()=>{try{localStorage.setItem('gcSoundSettings',JSON.stringify(settings))}catch{}};
  function tone(freq=660,duration=.11,type='sine',gain=.18,delay=0){
-  if(!settings.enabled||settings.volume<=0||settings.mode==='voice')return;
+  if(!settings.enabled||settings.volume<=0)return;
   try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();const osc=ctx.createOscillator(),amp=ctx.createGain(),t=ctx.currentTime+delay;osc.type=type;osc.frequency.setValueAtTime(freq,t);amp.gain.setValueAtTime(.0001,t);amp.gain.exponentialRampToValueAtTime(Math.max(.001,gain*settings.volume),t+.012);amp.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(amp);amp.connect(ctx.destination);osc.start(t);osc.stop(t+duration+.02)}catch{}
  }
  function play(kind='tap'){
@@ -24,21 +24,19 @@ const GCSound = (()=>{
   const seq={tap:[[520,.055,'sine',.10,0]],start:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.13],[784,.2,'triangle',.18,.26]],tick:[[880,.045,'sine',.10,0]],draw:[[660,.08,'sine',.14,0],[880,.12,'sine',.14,.09]],success:[[523,.12,'triangle',.16,0],[659,.12,'triangle',.16,.12],[784,.12,'triangle',.16,.24],[1047,.28,'triangle',.18,.36]],error:[[330,.13,'sawtooth',.10,0],[247,.2,'sawtooth',.10,.14]],vote:[[440,.07,'sine',.12,0],[587,.1,'sine',.12,.09]],finish:[[784,.13,'triangle',.16,0],[988,.13,'triangle',.16,.14],[1175,.32,'triangle',.18,.28]],join:[[587,.08,'sine',.12,0],[784,.12,'sine',.13,.1]]};
   (seq[kind]||seq.tap).forEach(a=>tone(...a));
  }
- function speak(message){if(!settings.enabled||settings.mode==='effects'||!('speechSynthesis'in window)||!message)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(message));u.lang='th-TH';u.rate=1;u.pitch=1;u.volume=settings.volume; speechSynthesis.speak(u)}catch{}}
  function update(patch){settings={...settings,...patch};save();}
  function get(){return {...settings}}
- return {play,speak,update,get};
+ return {play,update,get};
 })();
 function installGCSoundUI(){
  if(document.getElementById('gcSoundDock'))return;
- const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundPanel select{width:100%;padding:8px;border-radius:8px;background:#1e293b;color:#fff;border:1px solid #475569}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">65%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><label>รูปแบบเสียง</label><select id="gcSoundMode"><option value="effects">เสียงเอฟเฟกต์เกม</option><option value="voice">เสียงพูดประกาศ</option><option value="all">เสียงเกมและเสียงพูด</option></select><button id="gcSoundTest">ทดสอบเสียง</button><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
+ const dock=document.createElement('div');dock.id='gcSoundDock';dock.innerHTML=`<style>#gcSoundDock{position:fixed;right:18px;bottom:18px;z-index:14000;font-family:inherit}#gcSoundDock button{cursor:pointer}#gcSoundToggle{width:46px;height:46px;border:1px solid #64748b;border-radius:50%;background:#172033;color:#fff;font-size:19px;box-shadow:0 5px 18px #0004}#gcSoundPanel{display:none;position:absolute;right:0;bottom:56px;width:260px;padding:15px;border:1px solid #64748b;border-radius:14px;background:#111c2b;color:#f4f7fb;box-shadow:0 12px 35px #0006}#gcSoundPanel.open{display:grid;gap:11px}#gcSoundPanel label{font-size:12px;color:#cbd5e1;display:flex;justify-content:space-between;gap:8px}#gcSoundPanel input[type=range]{width:100%}#gcSoundPanel select{width:100%;padding:8px;border-radius:8px;background:#1e293b;color:#fff;border:1px solid #475569}#gcSoundTest{padding:8px;border-radius:8px;background:#245b78;color:#fff;border:0;font-weight:800}</style><button id="gcSoundToggle" aria-label="ตั้งค่าเสียง" title="ตั้งค่าเสียง">🔊</button><div id="gcSoundPanel"><b>🔊 GANG CONTROL SOUND</b><label>เปิดใช้งานเสียง <input id="gcSoundEnabled" type="checkbox"></label><label>ระดับเสียง <span id="gcSoundValue">65%</span></label><input id="gcSoundVolume" type="range" min="0" max="100" step="5"><small style="color:#94a3b8">ใช้เฉพาะเสียงเอฟเฟกต์ ไม่มีเสียงพูดหรือเสียงสังเคราะห์</small><button id="gcSoundTest">ทดสอบเสียง</button><small style="color:#94a3b8">การตั้งค่าจะบันทึกไว้ในอุปกรณ์นี้</small></div>`;
  document.body.appendChild(dock);
- const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundMode').value=s.mode;$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇'};
+ const $s=id=>dock.querySelector('#'+id),sync=()=>{const s=GCSound.get();$s('gcSoundEnabled').checked=s.enabled;$s('gcSoundVolume').value=Math.round(s.volume*100);$s('gcSoundValue').textContent=Math.round(s.volume*100)+'%';$s('gcSoundToggle').textContent=s.enabled?'🔊':'🔇'};
  $s('gcSoundToggle').onclick=()=>{$s('gcSoundPanel').classList.toggle('open');GCSound.play('tap')};
  $s('gcSoundEnabled').onchange=e=>{GCSound.update({enabled:e.target.checked});sync();if(e.target.checked)GCSound.play('start')};
  $s('gcSoundVolume').oninput=e=>{const volume=Number(e.target.value)/100;GCSound.update({volume});$s('gcSoundValue').textContent=e.target.value+'%'};
- $s('gcSoundMode').onchange=e=>GCSound.update({mode:e.target.value});
- $s('gcSoundTest').onclick=()=>{GCSound.play('success');GCSound.speak('ทดสอบระบบเสียง GANG CONTROL')};
+ $s('gcSoundTest').onclick=()=>GCSound.play('success');
  document.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!b.closest('#gcSoundDock'))GCSound.play('tap')},true);
  sync();
 }
@@ -504,7 +502,7 @@ function bingo(){
 }
 
 let impostorLastSignature='';
-async function loadImpostor(roomId){roomId=roomId||localStorage.getItem('gcImpostorRoom')||'';const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';const beforeState=impostorState;const before=beforeState?JSON.stringify(beforeState):'';const next=await api('/api/impostor'+q);const oldRoom=beforeState?.room, newRoom=next?.room;if(newRoom&&oldRoom&&String(newRoom.id)===String(oldRoom.id)){if(newRoom.phase!==oldRoom.phase){if(newRoom.phase==='finished'){GCSound.play('finish');GCSound.speak((newRoom.winner==='crew'?'ฝ่ายพลเมืองชนะ':'Impostor ชนะ')+' '+(newRoom.resultText||''));}else if(newRoom.phase==='clue'||newRoom.phase==='vote'||newRoom.phase==='guess')GCSound.play('start');}else if((newRoom.clues?.length||0)>(oldRoom.clues?.length||0))GCSound.play('join');else if((newRoom.players||[]).filter(x=>x.voted).length>(oldRoom.players||[]).filter(x=>x.voted).length)GCSound.play('vote');}impostorState=next;if(page==='impostor'&&before!==JSON.stringify(next))render();}
+async function loadImpostor(roomId){roomId=roomId||localStorage.getItem('gcImpostorRoom')||'';const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';const beforeState=impostorState;const before=beforeState?JSON.stringify(beforeState):'';const next=await api('/api/impostor'+q);const oldRoom=beforeState?.room, newRoom=next?.room;if(newRoom&&oldRoom&&String(newRoom.id)===String(oldRoom.id)){if(newRoom.phase!==oldRoom.phase){if(newRoom.phase==='finished'){GCSound.play('finish');}else if(newRoom.phase==='clue'||newRoom.phase==='vote'||newRoom.phase==='guess')GCSound.play('start');}else if((newRoom.clues?.length||0)>(oldRoom.clues?.length||0))GCSound.play('join');else if((newRoom.players||[]).filter(x=>x.voted).length>(oldRoom.players||[]).filter(x=>x.voted).length)GCSound.play('vote');}impostorState=next;if(page==='impostor'&&before!==JSON.stringify(next))render();}
 async function impostorPost(path,body={}){await api(path,{method:'POST',body:JSON.stringify(body)});await loadImpostor(impostorState?.room?.id);}
 function impostor(){
  const rooms=impostorState?.rooms||[],r=impostorState?.room,p=r?.me,players=r?.players||[],phase=r?.phase;
@@ -570,7 +568,7 @@ async function loadBingo(roomId){
  const current=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
  const sig=current.map(w=>String(w.userId)).sort().join('|');
  const prevSig=previous.map(w=>String(w.userId)).sort().join('|');
- if(sig&&sig!==prevSig&&bingoState?.room?.status==='finished'){GCSound.play('finish');GCSound.speak('บิงโก ผู้ชนะคือ '+current.map(w=>w.name).join(' และ '));showBingoWinnerPopup(current);}
+ if(sig&&sig!==prevSig&&bingoState?.room?.status==='finished'){GCSound.play('finish');showBingoWinnerPopup(current);}
  bingoHasLoadedOnce=true;
  if(next.room?.status==='finished'&&!next.room?.canStillWin&&!current.some(w=>String(w.userId)===String(state?.user?.id))){bingoState={...next,room:null};}
  if(page==='bingo'&&before!==JSON.stringify(next))render();
