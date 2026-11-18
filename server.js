@@ -178,67 +178,20 @@ app.get('/api/data', auth, (req, res) => {
   });
 });
 
-// BINGO activity: one shared game persisted in the existing JSONB state.
+// BINGO V4: public room lobby, room ownership, leave/join and timed auto-draw.
 function makeBingoCard(){
- const card=[];
- for(let col=0;col<5;col++){
-  const min=col*15+1,max=min+14,nums=[];
-  while(nums.length<5){const n=Math.floor(Math.random()*(max-min+1))+min;if(!nums.includes(n))nums.push(n)}
-  for(let row=0;row<5;row++)card[row*5+col]=nums[row];
- }
- card[12]=null;return card;
+ const card=[];for(let col=0;col<5;col++){const min=col*15+1,max=min+14,nums=[];while(nums.length<5){const n=Math.floor(Math.random()*(max-min+1))+min;if(!nums.includes(n))nums.push(n)}for(let row=0;row<5;row++)card[row*5+col]=nums[row]}card[12]=null;return card;
 }
-function bingoLine(marked){
- const lines=[];
- for(let r=0;r<5;r++)lines.push(Array.from({length:5},(_,c)=>r*5+c));
- for(let c=0;c<5;c++)lines.push(Array.from({length:5},(_,r)=>r*5+c));
- lines.push([0,6,12,18,24],[4,8,12,16,20]);
- const found=lines.find(line=>line.every(i=>marked[i]));
- return found?(found.length===5?(found[0]===0&&found[1]===6?'แนวทแยง':'ครบ 5 ช่อง'):'BINGO'):null;
-}
-function bingoPublic(db,req){
- const g=db.bingoGame||null;if(!g)return {game:null,player:null,players:[]};
- const user=req.session.user;const player=g.players.find(p=>p.userId===user.id)||null;
- return {game:{id:g.id,title:g.title,status:g.status,drawn:g.drawn,winner:g.winner,createdAt:g.createdAt},player:player?{card:player.card,marked:player.marked}:null,players:g.players.map(p=>({name:p.name,winner:!!(g.winner&&g.winner.userId===p.userId)}))};
-}
-app.get('/api/bingo',auth,(req,res)=>{const db=readDB();res.json(bingoPublic(db,req))});
-app.post('/api/bingo/create',auth,adminOnly,(req,res)=>{
- const db=readDB(),title=String(req.body?.title||'GANG BINGO').trim().slice(0,60);
- if(!title)return res.status(400).json({error:'กรุณาตั้งชื่อเกม'});
- db.bingoGame={id:Date.now(),title,status:'active',drawn:[],players:[],winner:null,createdAt:isoNow()};
- log(db,req.session.user.name,'สร้างเกม BINGO',title);writeDB(db);res.json({ok:true});
-});
-app.post('/api/bingo/join',auth,(req,res)=>{
- const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'ไม่มีเกมที่เปิดรับผู้เล่น'});
- if(g.players.some(p=>p.userId===req.session.user.id))return res.status(400).json({error:'คุณเข้าร่วมเกมนี้แล้ว'});
- g.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});
- log(db,req.session.user.name,'เข้าร่วมเกม BINGO',g.title);writeDB(db);res.json({ok:true});
-});
-app.post('/api/bingo/draw',auth,adminOnly,(req,res)=>{
- const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'ไม่มีเกมที่กำลังเล่น'});
- const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!g.drawn.includes(n));
- if(!remaining.length)return res.status(400).json({error:'สุ่มเลขครบทั้ง 75 เลขแล้ว'});
- const number=remaining[Math.floor(Math.random()*remaining.length)];g.drawn.push(number);log(db,req.session.user.name,'สุ่มเลข BINGO',`เลข ${number}`);writeDB(db);res.json({ok:true,number});
-});
-app.post('/api/bingo/mark',auth,(req,res)=>{
- const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'เกมจบแล้วหรือยังไม่มีเกม'});
- const p=g.players.find(x=>x.userId===req.session.user.id),index=Number(req.body?.index);
- if(!p)return res.status(403).json({error:'กรุณาเข้าร่วมเกมก่อน'});
- if(!Number.isInteger(index)||index<0||index>24||index===12)return res.status(400).json({error:'ตำแหน่งไม่ถูกต้อง'});
- if(!g.drawn.includes(p.card[index]))return res.status(400).json({error:'เลขนี้ยังไม่ถูกสุ่ม'});
- p.marked[index]=true;writeDB(db);res.json({ok:true});
-});
-app.post('/api/bingo/claim',auth,(req,res)=>{
- const db=readDB(),g=db.bingoGame;if(!g||g.status!=='active')return res.status(400).json({error:'เกมจบแล้วหรือยังไม่มีเกม'});
- const p=g.players.find(x=>x.userId===req.session.user.id);if(!p)return res.status(403).json({error:'กรุณาเข้าร่วมเกมก่อน'});
- // Recompute marks from drawn numbers; the free center always counts.
- p.marked=p.card.map((n,i)=>i===12||g.drawn.includes(n));
- const lines=[];for(let r=0;r<5;r++)lines.push(Array.from({length:5},(_,c)=>r*5+c));for(let c=0;c<5;c++)lines.push(Array.from({length:5},(_,r)=>r*5+c));lines.push([0,6,12,18,24],[4,8,12,16,20]);
- const winning=lines.find(line=>line.every(i=>p.marked[i]));if(!winning)return res.status(400).json({error:'ยังไม่ครบ 5 ช่องในแถว คอลัมน์ หรือแนวทแยง'});
- const lineName=winning[0]===0&&winning[1]===6?'แนวทแยง':winning[0]===4&&winning[1]===8?'แนวทแยง':winning[0]<5?'แนวนอน':winning[0]%5===0?'แนวตั้ง':'BINGO';
- g.winner={userId:p.userId,name:p.name,line:lineName,claimedAt:isoNow()};g.status='finished';log(db,p.name,'ชนะเกม BINGO',`${g.title} · ${lineName}`);writeDB(db);res.json({ok:true,line:lineName});
-});
-
+function roomFor(db,id){return (db.bingoRooms||[]).find(r=>String(r.id)===String(id));}
+function bingoRoomPublic(room,req){if(!room)return null;const user=req.session.user,p=room.players.find(x=>String(x.userId)===String(user.id))||null;return {id:room.id,title:room.title,status:room.status,hostId:room.hostId,hostName:room.hostName,drawn:room.drawn,winner:room.winner,createdAt:room.createdAt,startedAt:room.startedAt,players:room.players.map(x=>({userId:x.userId,name:x.name,winner:!!(room.winner&&String(room.winner.userId)===String(x.userId))})),player:p?{card:p.card,marked:p.marked}:null,isHost:String(room.hostId)===String(user.id)};}
+app.get('/api/bingo',auth,(req,res)=>{const db=readDB();if(!Array.isArray(db.bingoRooms))db.bingoRooms=[];const rooms=db.bingoRooms.filter(r=>r.status!=='closed').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(r=>({id:r.id,title:r.title,status:r.status,hostName:r.hostName,playerCount:r.players.length,createdAt:r.createdAt}));const room=req.query.roomId?roomFor(db,req.query.roomId):null;res.json({rooms,room:bingoRoomPublic(room,req)});});
+app.post('/api/bingo/create',auth,(req,res)=>{const db=readDB();if(!Array.isArray(db.bingoRooms))db.bingoRooms=[];const title=String(req.body?.title||'BINGO ROOM').trim().slice(0,60);if(!title)return res.status(400).json({error:'กรุณาตั้งชื่อห้อง'});const room={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,title,status:'waiting',hostId:req.session.user.id,hostName:req.session.user.name,drawn:[],players:[],winner:null,createdAt:isoNow(),startedAt:null,nextDrawAt:null};db.bingoRooms.push(room);room.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});log(db,req.session.user.name,'สร้างห้อง BINGO',title);writeDB(db);res.json({ok:true,roomId:room.id});});
+app.post('/api/bingo/:id/join',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||r.status==='closed')return res.status(404).json({error:'ไม่พบห้องนี้'});if(r.status!=='waiting')return res.status(400).json({error:'ห้องเริ่มเล่นแล้ว ไม่สามารถเข้าร่วมได้'});if(r.players.some(p=>String(p.userId)===String(req.session.user.id)))return res.json({ok:true});r.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});log(db,req.session.user.name,'เข้าร่วมห้อง BINGO',r.title);writeDB(db);res.json({ok:true});});
+app.post('/api/bingo/:id/leave',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});const idx=r.players.findIndex(p=>String(p.userId)===String(req.session.user.id));if(idx<0)return res.status(400).json({error:'คุณไม่ได้อยู่ในห้องนี้'});r.players.splice(idx,1);if(!r.players.length)r.status='closed';else if(String(r.hostId)===String(req.session.user.id)){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}log(db,req.session.user.name,'ออกจากห้อง BINGO',r.title);writeDB(db);res.json({ok:true});});
+app.post('/api/bingo/:id/start',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะผู้สร้างห้องเท่านั้นที่เริ่มเกมได้'});if(r.status!=='waiting')return res.status(400).json({error:'ห้องนี้เริ่มหรือจบเกมไปแล้ว'});if(!r.players.length)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 1 คน'});r.status='playing';r.startedAt=isoNow();r.nextDrawAt=Date.now()+5000;log(db,req.session.user.name,'เริ่มเกม BINGO',r.title);writeDB(db);res.json({ok:true});});
+app.post('/api/bingo/:id/tick',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});if(r.status!=='playing')return res.json({ok:true,drawn:false});const now=Date.now();if(now<(r.nextDrawAt||0))return res.json({ok:true,drawn:false});const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!r.drawn.includes(n));if(!remaining.length){r.status='finished';writeDB(db);return res.json({ok:true,drawn:false,finished:true});}const number=remaining[Math.floor(Math.random()*remaining.length)];r.drawn.push(number);r.nextDrawAt=now+5000;writeDB(db);res.json({ok:true,drawn:true,number});});
+app.post('/api/bingo/:id/mark',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||r.status!=='playing')return res.status(400).json({error:'เกมยังไม่เริ่มหรือจบแล้ว'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id)),index=Number(req.body?.index);if(!p)return res.status(403).json({error:'คุณไม่ได้อยู่ในห้องนี้'});if(!Number.isInteger(index)||index<0||index>24||index===12)return res.status(400).json({error:'ตำแหน่งไม่ถูกต้อง'});if(!r.drawn.includes(p.card[index]))return res.status(400).json({error:'เลขนี้ยังไม่ถูกสุ่ม'});p.marked[index]=true;writeDB(db);res.json({ok:true});});
+app.post('/api/bingo/:id/claim',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||r.status!=='playing')return res.status(400).json({error:'เกมยังไม่เริ่มหรือจบแล้ว'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));if(!p)return res.status(403).json({error:'คุณไม่ได้อยู่ในห้องนี้'});p.marked=p.card.map((n,i)=>i===12||r.drawn.includes(n));const lines=[];for(let y=0;y<5;y++)lines.push(Array.from({length:5},(_,x)=>y*5+x));for(let x=0;x<5;x++)lines.push(Array.from({length:5},(_,y)=>y*5+x));lines.push([0,6,12,18,24],[4,8,12,16,20]);const win=lines.find(line=>line.every(i=>p.marked[i]));if(!win)return res.status(400).json({error:'ยังไม่ครบ 5 ช่องในแถว คอลัมน์ หรือแนวทแยง'});const line=win[1]===6||win[1]===8?'แนวทแยง':win[0]<5?'แนวนอน':win[0]%5===0?'แนวตั้ง':'BINGO';r.winner={userId:p.userId,name:p.name,line,claimedAt:isoNow()};r.status='finished';log(db,p.name,'ชนะเกม BINGO',`${r.title} · ${line}`);writeDB(db);res.json({ok:true,line});});
 
 // Admin records attendance for each member in one of the three daily sessions.
 app.post('/api/attendance', auth, adminOnly, (req, res) => {
