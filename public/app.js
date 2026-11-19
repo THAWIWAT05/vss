@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false;
-let state = null, werewolfState = null, werewolfPollBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
+let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
 const pageNames = { dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
@@ -670,7 +670,7 @@ function werewolf(){
  if(phase==='night'){
   let action='';
   if(!p?.alive)action='<div class="ww-notice">คุณถูกกำจัดแล้ว สามารถเฝ้าดูเกมต่อได้</div>';
-  else if(p.nightSubmitted)action=`${role==='seer'&&p.seerResult?`<div class="ww-notice" style="margin-bottom:10px;font-size:18px">🔮 ผลตรวจสอบ: <b>${p.seerResult.isWolf?'🔴 เป็นคนไม่ดี':'🟢 เป็นคนดี'}</b></div>`:''}<div class="ww-notice">ส่งคำสั่งกลางคืนแล้ว 🌙 รอผู้เล่นที่มีบทบาทอื่นดำเนินการ</div>`;
+  else if(p.nightSubmitted)action='<div class="ww-notice">ส่งคำสั่งกลางคืนแล้ว 🌙 รอผู้เล่นที่มีบทบาทอื่นดำเนินการ</div>';
   else if(p.role==='wolf')action=`<div class="ww-muted">เลือกเหยื่อหนึ่งคน หมาป่าทุกตัวต้องเลือก ระบบจะใช้เสียงข้างมาก</div><div class="ww-action-grid">${alive.filter(x=>x.role!=='wolf').map(x=>`<button class="ww-action" data-ww-night="kill" data-target="${esc(x.userId)}"><b>🐺 ${esc(x.name)}</b><small>เลือกเป็นเหยื่อคืนนี้</small></button>`).join('')}</div>`;
   else if(p.role==='seer')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบผลจะเห็นเฉพาะคุณ</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="inspect" data-target="${esc(x.userId)}"><b>🔮 ${esc(x.name)}</b><small>ตรวจสอบฝ่าย</small></button>`).join('')}</div>`;
   else if(p.role==='bodyguard'||p.role==='guardian')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อปกป้องคืนนี้</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="protect" data-target="${esc(x.userId)}"><b>${p.role==='bodyguard'?'🛡️':'✨'} ${esc(x.name)}</b><small>ปกป้องผู้เล่นคนนี้</small></button>`).join('')}</div>`;
@@ -682,7 +682,7 @@ function werewolf(){
  if(phase==='vote')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">⚖️</span><div><strong>ลงคะแนนประหาร · วันที่ ${r.dayNumber}</strong><div class="ww-muted">เลือกผู้เล่นที่คิดว่าเป็นหมาป่า โหวตได้หนึ่งครั้ง</div></div></div>${!p?.alive?'<div class="ww-notice" style="margin-top:12px">คุณถูกกำจัดแล้ว ไม่สามารถลงคะแนนได้</div>':p?.voted?'<div class="ww-notice" style="margin-top:12px">คุณลงคะแนนแล้ว รอผู้เล่นคนอื่น…</div>':`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-vote="${esc(x.userId)}"><b>⚖️ ${esc(x.name)}</b><small>โหวตประหาร</small></button>`).join('')}<button class="ww-action" data-ww-vote="skip"><b>ข้ามการโหวต</b><small>งดออกเสียง</small></button></div>`}<div class="ww-muted" style="margin-top:12px">ลงคะแนนแล้ว ${r.voteCount}/${r.aliveCount} คน</div></div>`;
  if(phase==='hunter_shot')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🏹</span><div><strong>นายพรานลั่นไกครั้งสุดท้าย</strong><div class="ww-muted">${esc(r.pendingHunterName||'นายพราน')} เลือกผู้เล่นหนึ่งคนเพื่อยิงก่อนออกจากเกม</div></div></div>${String(r.meId)===String(r.pendingHunterId||'')?`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-hunter="${esc(x.userId)}"><b>🏹 ${esc(x.name)}</b><small>ยิงผู้เล่นคนนี้</small></button>`).join('')}</div>`:'<div class="ww-notice">รอนายพรานเลือกเป้าหมาย…</div>'}</div>`;
  if(phase==='finished')stage=`<div class="ww-result"><div style="font-size:46px">${r.winner==='jester'?'🤡':r.winner==='village'?'🏆':'🐺'}</div><div class="ww-kicker">THE VILLAGE HAS FALLEN</div><h2>${r.winner==='jester'?'JESTER WINS':r.winner==='village'?'VILLAGE WINS':'WEREWOLVES WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><div class="ww-players" style="text-align:left;margin:16px 0">${(r.roleReveal||[]).map(x=>`<div class="ww-player"><b>${esc(x.name)}</b><small>${esc(x.role)} · ${x.alive?'รอดชีวิต':'ถูกกำจัด'}</small></div>`).join('')}</div>${r.isHost?'<button class="ww-btn" id="wwRematch">เริ่มเกมใหม่</button>':''}</div>`;
- return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${stage}<div class="ww-panel"><div class="ww-room"><h3>สมาชิกในหมู่บ้าน</h3><span class="ww-muted">${players.length} คน</span></div><div class="ww-players">${playerCards}</div></div></div></section>`;
+ return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${roleCard}${stage}<div class="ww-panel"><div class="ww-room"><h3>สมาชิกในหมู่บ้าน</h3><span class="ww-muted">${players.length} คน</span></div><div class="ww-players">${playerCards}</div></div></div></section>`;
 }
 function wireWerewolf(){
  $('#wwCreate')?.addEventListener('click',async()=>{try{const title=$('#wwTitle')?.value.trim()||'หมู่บ้านรัตติกาล';const out=await api('/api/werewolf/create',{method:'POST',body:JSON.stringify({title})});werewolfForceLobby=false;localStorage.setItem('gcWerewolfRoom',out.roomId);await loadWerewolf(out.roomId);toast('สร้างหมู่บ้านแล้ว แชร์รหัสให้เพื่อนได้เลย')}catch(e){toast(e.message)}});
@@ -697,7 +697,41 @@ function wireWerewolf(){
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`)}catch(e){toast(e.message)}});
  $('#wwExit')?.addEventListener('click',async()=>{try{if(!confirm('ต้องการออกจากเกมนี้ใช่หรือไม่?'))return;const roomId=werewolfState?.room?.id;werewolfForceLobby=true;localStorage.removeItem('gcWerewolfRoom');if(roomId)await api(`/api/werewolf/${encodeURIComponent(roomId)}/leave`,{method:'POST',body:'{}'});await loadWerewolf('',true);render();toast('ออกจากห้องแล้ว')}catch(e){toast(e.message)}});
- document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role;if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;try{const response=await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';GCSound.play(sound);if(role==='seer'&&type==='inspect'&&response.seerResult){if(werewolfState?.room?.me)werewolfState.room.me.seerResult=response.seerResult;render();toast(response.seerResult.isWolf?'ผลตรวจสอบ: เป็นคนไม่ดี':'ผลตรวจสอบ: เป็นคนดี')}await loadWerewolf(werewolfState.room.id);if(role==='seer'&&type==='inspect'&&response.seerResult){if(werewolfState?.room?.me&&!werewolfState.room.me.seerResult)werewolfState.room.me.seerResult=response.seerResult;render()}}catch(e){toast(e.message)}});
+ document.querySelectorAll('[data-ww-night]').forEach(b=>b.onclick=async()=>{
+  if(werewolfActionBusy||b.disabled)return;
+  const type=b.dataset.wwNight,targetId=b.dataset.target||'',role=werewolfState?.room?.me?.role,roomId=werewolfState?.room?.id;
+  if(!roomId)return;
+  if(type==='save'&&!targetId)return toast('รอให้หมาป่าเลือกเหยื่อก่อน');
+  if(!confirm('ยืนยันคำสั่งกลางคืนนี้?'))return;
+  werewolfActionBusy=true;
+  let actionAccepted=false;
+  document.querySelectorAll('[data-ww-night]').forEach(x=>{x.disabled=true;x.setAttribute('aria-busy','true');});
+  try{
+   const response=await api(`/api/werewolf/${encodeURIComponent(roomId)}/night-action`,{method:'POST',body:JSON.stringify({type,targetId})});
+   actionAccepted=true;
+   const sound=role==='wolf'?'wolfAttack':role==='seer'?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';
+   GCSound.play(sound);
+   if(werewolfState?.room?.me){werewolfState.room.me.nightSubmitted=true;}
+   if(role==='seer'&&type==='inspect'&&response.seerResult&&werewolfState?.room?.me){
+    werewolfState.room.me.seerResult={isWolf:!!response.seerResult.isWolf,checkedAt:new Date().toISOString()};
+   }
+   // Refresh authoritative room state, but retain the immediate result if a poll races the response.
+   try{await loadWerewolf(roomId);}catch(refreshError){/* keep the accepted action/result visible */}
+   if(werewolfState?.room?.me)werewolfState.room.me.nightSubmitted=true;
+   if(role==='seer'&&type==='inspect'&&response.seerResult&&werewolfState?.room?.me&&!werewolfState.room.me.seerResult){
+    werewolfState.room.me.seerResult={isWolf:!!response.seerResult.isWolf,checkedAt:new Date().toISOString()};
+   }
+   render();
+   if(role==='seer'&&type==='inspect'&&response.seerResult)toast(response.seerResult.isWolf?'ผลตรวจสอบ: เป็นคนไม่ดี':'ผลตรวจสอบ: เป็นคนดี');
+  }catch(e){
+   toast(e.message||'ส่งคำสั่งไม่สำเร็จ กรุณาลองอีกครั้ง');
+   try{await loadWerewolf(roomId);}catch(_){ }
+  }finally{
+   werewolfActionBusy=false;
+   document.querySelectorAll('[data-ww-night]').forEach(x=>{x.removeAttribute('aria-busy');if(!actionAccepted)x.disabled=false;});
+  }
+ });
+
  document.querySelectorAll('[data-ww-hunter]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันยิงผู้เล่นคนนี้?'))return;try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/hunter-shot`,{method:'POST',body:JSON.stringify({targetId:b.dataset.wwHunter})});GCSound.play('hunter');await loadWerewolf(werewolfState.room.id)}catch(e){toast(e.message)}});
  $('#wwOpenVote')?.addEventListener('click',async()=>{try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/open-vote`)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-vote]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันคะแนนโหวตนี้? เปลี่ยนคะแนนไม่ได้'))return;try{await werewolfPost(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/vote`,{targetId:b.dataset.wwVote})}catch(e){toast(e.message)}});
