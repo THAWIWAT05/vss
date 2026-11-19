@@ -885,8 +885,10 @@ function updateBingoCountdown(){
  if(ring)ring.style.setProperty('--progress',`${((7-left)/7*360)}deg`);
 }
 async function loadBingo(roomId){
- const showLobby=forceLobby||werewolfForceLobby;
- const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:(showLobby?'?lobby=1':'');
+ // BINGO has its own room state; do not read the WEREWOLF lobby flag here.
+ // The old forceLobby reference was undeclared and caused a ReferenceError
+ // every time BINGO loaded, including immediately after creating a room.
+ const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
  const before=bingoState?JSON.stringify(bingoState):'';
  const oldRoom=bingoState?.room||null;
  const previous=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
@@ -905,7 +907,19 @@ async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.s
 
 function wire(){
  if(page==='bingo'){
-  $('#bingoCreate')?.addEventListener('click',async()=>{const title=prompt('ตั้งชื่อห้อง BINGO','GANG BINGO ROOM');if(!title?.trim())return;try{const out=await api('/api/bingo/create',{method:'POST',body:JSON.stringify({title:title.trim()})});await loadBingo(out.roomId);toast('สร้างห้องแล้ว คุณเป็นเจ้าของห้อง')}catch(e){toast(e.message)}});
+  $('#bingoCreate')?.addEventListener('click',async()=>{
+   const button=$('#bingoCreate');
+   const title=prompt('ตั้งชื่อห้อง BINGO','GANG BINGO ROOM');
+   if(!title?.trim())return;
+   if(button)button.disabled=true;
+   try{
+    const out=await api('/api/bingo/create',{method:'POST',body:JSON.stringify({title:title.trim()})});
+    if(!out?.roomId)throw new Error('สร้างห้องไม่สำเร็จ: เซิร์ฟเวอร์ไม่ได้ส่งรหัสห้องกลับมา');
+    await loadBingo(out.roomId);
+    toast('สร้างห้องแล้ว คุณเป็นเจ้าของห้อง');
+   }catch(e){toast(e.message||'สร้างห้องไม่สำเร็จ');}
+   finally{if(button)button.disabled=false;}
+  });
   $('#bingoRefresh')?.addEventListener('click',async()=>{try{await loadBingo();toast('อัปเดตรายการห้องแล้ว')}catch(e){toast(e.message)}});
   document.querySelectorAll('[data-room-delete]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.roomDelete;if(!confirm('ยืนยันลบห้อง BINGO นี้ใช่หรือไม่? ผู้เล่นทุกคนจะถูกนำออกจากห้อง'))return;try{await api(`/api/bingo/${encodeURIComponent(id)}`,{method:'DELETE'});await loadBingo();toast('ลบห้องเรียบร้อยแล้ว')}catch(e){toast(e.message)}}));
   document.querySelectorAll('[data-room-join]').forEach(b=>b.addEventListener('click',async()=>{try{await api(`/api/bingo/${encodeURIComponent(b.dataset.roomJoin)}/join`,{method:'POST',body:'{}'});await loadBingo(b.dataset.roomJoin);toast('เข้าร่วมห้องแล้ว')}catch(e){toast(e.message)}}));
