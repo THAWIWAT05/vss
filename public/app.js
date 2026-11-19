@@ -146,8 +146,7 @@ function showWerewolfDeathEffect(event,roomId){
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
  const copy={
   wolf:{kicker:'NIGHT HUNT · FATAL ATTACK',title:'คุณถูกหมาป่าล่า',desc:'นักล่าพุ่งเข้าประชิด ก่อนตะปบและกัดอย่างรวดเร็ว',sound:'wolfAttack',asset:'/assets/death-fx/wolf-attack.gif'},
-  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.jpg'},
-  vote:{kicker:'THE VILLAGE · FINAL VERDICT',title:'คุณถูกโหวตประหาร',desc:'คมขวานประหารเหวี่ยงลงอย่างฉับพลัน ปิดฉากคำตัดสินของหมู่บ้าน',sound:'voteResult',asset:'/assets/death-fx/execution.jpg'}
+  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'}
  }[event.cause];
  if(!copy)return;
  document.getElementById('wwDeathFx')?.remove();
