@@ -294,32 +294,14 @@ function wwNightReady(room){
  const alive=wwAlive(room);
  const wolves=alive.filter(p=>p.role==='wolf');
  const nightRoles=['seer','witch','bodyguard','guardian'];
- return wolves.every(p=>!!p.nightAction) && nightRoles.every(role=>{const player=alive.find(p=>p.role===role);return !player||!!player.nightAction;});
-}
-function wwWolfTarget(room){
- const counts={};
- wwAlive(room).filter(p=>p.role==='wolf').forEach(p=>{
-  if(p.nightAction?.type==='kill'&&p.nightAction.targetId){
-   const id=String(p.nightAction.targetId);counts[id]=(counts[id]||0)+1;
-  }
- });
- const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
- return sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])?sorted[0][0]:null;
-}
-function wwBuildRoles(playerCount,roleConfig={},shuffle=true){
- const cfg={seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false,...roleConfig};
- const wolfCount=Math.max(1,Math.floor(playerCount/4));
- const special=['seer','witch','bodyguard','guardian','hunter','jester'].filter(role=>!!cfg[role]);
- const villagerCount=playerCount-wolfCount-special.length;
- if(playerCount<4||villagerCount<1)return null;
- const roles=[...special,...Array(wolfCount).fill('wolf'),...Array(villagerCount).fill('villager')];
- if(roles.length!==playerCount)return null;
- if(shuffle){for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}}
- return roles;
+ return wolves.every(p=>p.nightAction) && nightRoles.every(role=>{const player=alive.find(p=>p.role===role);return !player||!!player.nightAction;});
 }
 function wwResolveNight(room){
- const alive=wwAlive(room);
- const wolfTarget=wwWolfTarget(room);
+ const alive=wwAlive(room),wolves=alive.filter(p=>p.role==='wolf');
+ const counts={};
+ wolves.forEach(p=>{if(p.nightAction?.targetId)counts[String(p.nightAction.targetId)]=(counts[String(p.nightAction.targetId)]||0)+1;});
+ const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+ const wolfTarget=sorted.length&&(!sorted[1]||sorted[0][1]>sorted[1][1])?sorted[0][0]:null;
  const witch=alive.find(p=>p.role==='witch'),action=witch?.nightAction||{type:'skip'};
  const bodyguard=alive.find(p=>p.role==='bodyguard'),guardian=alive.find(p=>p.role==='guardian');
  const guarded=String(bodyguard?.nightAction?.targetId||''),protectedId=String(guardian?.nightAction?.targetId||'');
@@ -332,52 +314,28 @@ function wwResolveNight(room){
  }
  if(action.type==='poison'&&action.targetId&&!killed.includes(String(action.targetId)))killed.push(String(action.targetId));
  killed.forEach(id=>{const p=room.players.find(x=>String(x.userId)===String(id));if(p&&p.alive){p.alive=false;p.deathReason='night';}});
- room.lastNight={killed:killed.map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice,wolfAttack:!!wolfTarget,poisoned:action.type==='poison'&&!!action.targetId&&killed.includes(String(action.targetId))};
+ room.lastNight={killed:killed.map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice};
  if(guardian?.nightAction?.targetId)room.lastProtectedId=String(guardian.nightAction.targetId);
  room.players.forEach(p=>{p.nightAction=null;p.voted=null;});
- // A completed night always advances the day counter, even when a hunter gets a reaction shot.
- room.dayNumber=(room.dayNumber||0)+1;
  const fallenHunter=room.players.find(p=>p.role==='hunter'&&!p.alive&&p.deathReason==='night'&&!p.hunterShotUsed);
  if(fallenHunter){room.pendingHunterId=String(fallenHunter.userId);room.phase='hunter_shot';}
- else if(!wwCheckWin(room)){room.phase='day';}
-}
-function wwResolveVote(room){
- const alive=wwAlive(room);
- if(!alive.length||!alive.every(p=>!!p.voted))return false;
- const counts={};
- alive.forEach(p=>{if(p.voted!=='skip')counts[String(p.voted)]=(counts[String(p.voted)]||0)+1;});
- const values=Object.values(counts),max=values.length?Math.max(...values):0;
- const leaders=Object.keys(counts).filter(id=>counts[id]===max);
- if(max>0&&leaders.length===1){
-  const eliminated=room.players.find(p=>String(p.userId)===leaders[0]&&p.alive);
-  if(eliminated){
-   eliminated.alive=false;eliminated.deathReason='vote';
-   room.lastVote={name:eliminated.name,role:WW_ROLE_LABELS[eliminated.role]||eliminated.role};
-   if(eliminated.role==='jester')wwFinish(room,'jester',`${eliminated.name} ถูกโหวตออก · ตัวตลกชนะเกมทันที`);
-   else if(eliminated.role==='hunter'&&!eliminated.hunterShotUsed){room.pendingHunterId=String(eliminated.userId);room.phase='hunter_shot';}
-  }else room.lastVote={name:null,role:null};
- }else room.lastVote={name:null,role:null};
- if(room.phase!=='finished'&&room.phase!=='hunter_shot'&&!wwCheckWin(room)){
-  room.phase='night';
-  room.players.forEach(p=>{p.nightAction=null;p.voted=null;});
- }
- return true;
+ else if(!wwCheckWin(room)){room.phase='day';room.dayNumber=(room.dayNumber||0)+1;}
 }
 function wwPublic(room,req){
  if(!room)return null;
  const uid=String(req.session.user.id),me=room.players.find(p=>String(p.userId)===uid)||null;
  const alive=wwAlive(room);
  const roleReveal=room.phase==='finished';
- const nightActors=alive.filter(p=>['wolf','seer','witch','bodyguard','guardian'].includes(p.role));
- const nightSubmittedCount=nightActors.filter(p=>!!p.nightAction).length;
- const witchAttackTarget=wwWolfTarget(room);
+ const wolfVotes={};room.players.filter(p=>p.alive&&p.role==='wolf'&&p.nightAction?.targetId).forEach(p=>{const k=String(p.nightAction.targetId);wolfVotes[k]=(wolfVotes[k]||0)+1;});
+ const wolfVoteRows=Object.entries(wolfVotes).sort((a,b)=>b[1]-a[1]);
+ const witchAttackTarget=wolfVoteRows.length&&(!wolfVoteRows[1]||wolfVoteRows[0][1]>wolfVoteRows[1][1])?wolfVoteRows[0][0]:null;
  return {
   id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:room.roleConfig||{seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false},
   hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,
-  me:me?{role:me.role,alive:me.alive,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.role==='seer'?(me.seerResult||null):null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
-  players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,voted:!!p.voted})),
+  me:me?{role:me.role,alive:me.alive,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult||null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
+  players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,nightSubmitted:!!p.nightAction,voted:!!p.voted})),
   aliveCount:alive.length,wolfCount:alive.filter(p=>p.role==='wolf').length,
-  nightReady:room.phase==='night'?wwNightReady(room):false,nightSubmittedCount,nightRequiredCount:nightActors.length,
+  nightReady:room.phase==='night'?wwNightReady(room):false,
   pendingHunterId:room.phase==='hunter_shot'?room.pendingHunterId:null,pendingHunterName:room.phase==='hunter_shot'?room.players.find(p=>String(p.userId)===String(room.pendingHunterId))?.name:null,
   voteCount:alive.filter(p=>p.voted).length,
   lastNight:room.phase==='day'||room.phase==='vote'||room.phase==='hunter_shot'||room.phase==='finished'?room.lastNight||null:null,
@@ -436,10 +394,21 @@ app.post('/api/werewolf/:id/leave',auth,(req,res)=>{
  if(r.phase==='lobby'||r.phase==='finished')r.players=r.players.filter(x=>String(x.userId)!==uid);
  else{
   p.alive=false;p.left=true;p.nightAction={type:'skip'};p.voted=p.voted||'skip';r.players.forEach(x=>{if(String(x.voted)===uid)x.voted='skip';});
-  if(String(r.pendingHunterId||'')===uid){r.pendingHunterId=null;r.phase=p.deathReason==='night'?'day':'night';}
+  if(String(r.pendingHunterId||'')===uid){r.pendingHunterId=null;r.phase=p.deathReason==='night'?'day':'night';if(r.phase==='day')r.dayNumber=(r.dayNumber||0)+1;}
   if(wwCheckWin(r)){}
   else if(r.phase==='night'&&wwNightReady(r))wwResolveNight(r);
-  else if(r.phase==='vote'&&wwAlive(r).every(x=>x.voted))wwResolveVote(r);
+  else if(r.phase==='vote'&&wwAlive(r).every(x=>x.voted)){
+   const alive=wwAlive(r),counts={};alive.forEach(x=>{if(x.voted!=='skip')counts[String(x.voted)]=(counts[String(x.voted)]||0)+1;});
+   const vals=Object.values(counts),max=vals.length?Math.max(...vals):0,leaders=Object.keys(counts).filter(k=>counts[k]===max);
+   if(max>0&&leaders.length===1){
+    const eliminated=r.players.find(x=>String(x.userId)===leaders[0]);
+    if(eliminated){eliminated.alive=false;eliminated.deathReason='vote';r.lastVote={name:eliminated.name,role:WW_ROLE_LABELS[eliminated.role]};
+     if(eliminated.role==='jester')wwFinish(r,'jester',`${eliminated.name} ถูกโหวตออก · ตัวตลกชนะเกมทันที`);
+     else if(eliminated.role==='hunter'&&!eliminated.hunterShotUsed){r.pendingHunterId=String(eliminated.userId);r.phase='hunter_shot';}
+    }
+   }else r.lastVote={name:null,role:null};
+   if(r.phase==='vote'&&!wwCheckWin(r)){r.phase='night';r.players.forEach(x=>{x.nightAction=null;x.voted=null;});}
+  }
  }
  if(!r.players.length)db.werewolfRooms=db.werewolfRooms.filter(x=>x.id!==r.id);
  else if(wasHost){const next=r.players.find(x=>x.alive)||r.players[0];r.hostId=next.userId;r.hostName=next.name;}
@@ -450,8 +419,10 @@ app.post('/api/werewolf/:id/configure',auth,(req,res)=>{
  if(!r||r.phase!=='lobby')return res.status(400).json({error:'ตั้งค่าบทบาทได้เฉพาะก่อนเริ่มเกม'});
  if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่ตั้งค่าได้'});
  const roleConfig={seer:!!req.body?.seer,witch:!!req.body?.witch,bodyguard:!!req.body?.bodyguard,guardian:!!req.body?.guardian,hunter:!!req.body?.hunter,jester:!!req.body?.jester};
+ const wolfCount=Math.max(1,Math.floor(r.players.length/4));
+ const specialCount=Object.values(roleConfig).filter(Boolean).length;
  if(r.players.length<4)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 4 คน'});
- if(!wwBuildRoles(r.players.length,roleConfig,false))return res.status(400).json({error:'บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน'});
+ if(r.players.length-wolfCount-specialCount<1)return res.status(400).json({error:'บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน'});
  r.roleConfig=roleConfig;r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true,roleConfig:r.roleConfig});
 });
 app.post('/api/werewolf/:id/start',auth,(req,res)=>{
@@ -459,9 +430,12 @@ app.post('/api/werewolf/:id/start',auth,(req,res)=>{
  if(!r||r.phase!=='lobby')return res.status(400).json({error:'ห้องนี้เริ่มไปแล้วหรือไม่มีอยู่'});
  if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่เริ่มได้'});
  const n=r.players.length;if(n<4)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 4 คน'});if(n>16)return res.status(400).json({error:'ผู้เล่นเกินจำนวนที่กำหนด'});
- const roles=wwBuildRoles(n,r.roleConfig||{});
- if(!roles)return res.status(400).json({error:'บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน'});
- r.players.forEach((p,i)=>{p.role=roles[i];p.alive=true;p.left=false;p.nightAction=null;p.voted=null;p.seerResult=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.deathReason=null;});
+ const cfg={seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false,...(r.roleConfig||{})},wolfCount=Math.max(1,Math.floor(n/4));
+ const special=['seer','witch','bodyguard','guardian','hunter','jester'].filter(role=>cfg[role]);
+ const roles=[...special,...Array(wolfCount).fill('wolf'),...Array(n-wolfCount-special.length).fill('villager')];
+ if(roles.filter(x=>x==='villager').length<1)return res.status(400).json({error:'บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน'});
+ for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
+ r.players.forEach((p,i)=>{p.role=roles[i];p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.deathReason=null;});
  r.phase='night';r.dayNumber=0;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;r.startedAt=isoNow();r.lastActivityAt=isoNow();
  log(db,req.session.user.name,'เริ่มเกม WEREWOLF',`${r.code} · ${n} คน`);writeDB(db);res.json({ok:true});
 });
@@ -477,20 +451,20 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
   if(type!=='kill'||!target||target.role==='wolf')return res.status(400).json({error:'เลือกเป้าหมายที่ไม่ใช่หมาป่า'});
   p.nightAction={type:'kill',targetId};
  }else if(p.role==='seer'){
-  if(type!=='inspect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
+  if(type!=='inspect'||!target||target.userId===p.userId)return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
   p.seerResult={targetName:target.name,isWolf:target.role==='wolf'};
   p.nightAction={type:'inspect',targetId};
  }else if(p.role==='witch'){
   if(!['save','poison','skip'].includes(type))return res.status(400).json({error:'คำสั่งแม่มดไม่ถูกต้อง'});
   if(type==='save'){
-   if(p.witchSaveUsed||!target||target.role==='wolf'||String(targetId)!==String(wwWolfTarget(r)||''))return res.status(400).json({error:'ใช้ยาชุบชีวิตไปแล้วหรือเป้าหมายไม่ใช่เหยื่อที่หมาป่าเลือก'});
+   if(p.witchSaveUsed||!target||target.role==='wolf')return res.status(400).json({error:'ใช้ยาชุบชีวิตไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
    p.witchSaveUsed=true;p.nightAction={type:'save',targetId};
   }else if(type==='poison'){
-   if(p.witchPoisonUsed||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'ใช้ยาพิษไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
+   if(p.witchPoisonUsed||!target||target.userId===p.userId)return res.status(400).json({error:'ใช้ยาพิษไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
    p.witchPoisonUsed=true;p.nightAction={type:'poison',targetId};
   }else p.nightAction={type:'skip'};
  }else if(p.role==='bodyguard'||p.role==='guardian'){
-  if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
+  if(type!=='protect'||!target||target.userId===p.userId)return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
   if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
   p.nightAction={type:'protect',targetId};
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
@@ -512,11 +486,21 @@ app.post('/api/werewolf/:id/vote',auth,(req,res)=>{
  if(!p||!p.alive||p.voted)return res.status(400).json({error:'คุณโหวตไปแล้วหรือไม่มีสิทธิ์'});
  if(targetId!=='skip'){
   const target=r.players.find(x=>String(x.userId)===targetId&&x.alive);
-  if(!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกเป้าหมายไม่ถูกต้อง'});
+  if(!target||target.userId===p.userId)return res.status(400).json({error:'เลือกเป้าหมายไม่ถูกต้อง'});
   p.voted=targetId;
  }else p.voted='skip';
  r.lastActivityAt=isoNow();
- wwResolveVote(r);
+ const alive=wwAlive(r);
+ if(alive.every(x=>x.voted)){
+  const counts={};alive.forEach(x=>{if(x.voted!=='skip')counts[String(x.voted)]=(counts[String(x.voted)]||0)+1;});
+  const vals=Object.values(counts),max=vals.length?Math.max(...vals):0,leaders=Object.keys(counts).filter(k=>counts[k]===max);
+  if(max>0&&leaders.length===1){
+   const eliminated=r.players.find(x=>String(x.userId)===leaders[0]);eliminated.alive=false;eliminated.deathReason='vote';r.lastVote={name:eliminated.name,role:WW_ROLE_LABELS[eliminated.role]};
+   if(eliminated.role==='jester'){wwFinish(r,'jester',`${eliminated.name} ถูกโหวตออก · ตัวตลกชนะเกมทันที`);}
+   else if(eliminated.role==='hunter'&&!eliminated.hunterShotUsed){r.pendingHunterId=String(eliminated.userId);r.phase='hunter_shot';}
+  }else r.lastVote={name:null,role:null};
+  if(r.phase!=='finished'&&r.phase!=='hunter_shot'&&!wwCheckWin(r)){r.phase='night';r.players.forEach(x=>{x.nightAction=null;x.voted=null;});}
+ }
  writeDB(db);res.json({ok:true,phase:r.phase});
 });
 app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
@@ -527,19 +511,14 @@ app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
  const target=r.players.find(p=>String(p.userId)===String(req.body?.targetId)&&p.alive);
  if(!target||String(target.userId)===String(hunter.userId))return res.status(400).json({error:'เลือกเป้าหมายไม่ถูกต้อง'});
  target.alive=false;target.deathReason='hunter';hunter.hunterShotUsed=true;r.pendingHunterId=null;
- if(!wwCheckWin(r)){
-  r.phase=hunter.deathReason==='night'?'day':'night';
-  if(r.phase==='night')r.players.forEach(p=>{p.nightAction=null;p.voted=null;});
- }
+ if(!wwCheckWin(r)){r.phase=r.lastVote?'night':'day';if(r.phase==='night')r.players.forEach(p=>{p.nightAction=null;p.voted=null;});else r.dayNumber=(r.dayNumber||0)+1;}
  r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true,phase:r.phase});
 });
 app.post('/api/werewolf/:id/rematch',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
  if(!r||r.phase!=='finished'||String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องหลังจบเกมเท่านั้น'});
- r.players=r.players.filter(p=>!p.left);
- if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players[0]){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}
  r.phase='lobby';r.dayNumber=0;r.winner=null;r.resultText=null;r.finishedAt=null;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;
- r.players.forEach(p=>{p.role=null;p.alive=true;p.left=false;p.nightAction=null;p.voted=null;p.seerResult=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.deathReason=null;});
+ r.players.forEach(p=>{p.role=null;p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.deathReason=null;});
  r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true});
 });
 
