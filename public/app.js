@@ -100,6 +100,42 @@ function installWerewolfStyles(){if($('#werewolfStyles'))return;const st=documen
 @media(max-width:850px){.bingo-main>aside,.im-shell aside,.ww-body>aside,.game-right-sidebar,.right-game-sidebar{max-height:none;overflow:visible}}
 `;document.head.appendChild(st)}
 
+
+function installWerewolfDeathEffects(){
+ if($('#wwDeathFxStyles'))return;
+ const st=document.createElement('style');st.id='wwDeathFxStyles';st.textContent=`
+ #wwDeathFx{position:fixed;inset:0;z-index:30000;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 42%,#38202a 0%,#100d15 48%,#030509 100%);color:#fff;overflow:hidden;animation:wwFxFade .45s ease both;font-family:inherit}
+ #wwDeathFx:before{content:'';position:absolute;inset:-30%;background:repeating-linear-gradient(115deg,transparent 0 35px,#ffffff08 36px 38px);animation:wwFxDrift 7s linear infinite}
+ #wwDeathFx .wwfx-vignette{position:absolute;inset:0;box-shadow:inset 0 0 150px 45px #000;pointer-events:none}
+ #wwDeathFx .wwfx-card{position:relative;z-index:2;width:min(680px,calc(100vw - 34px));padding:clamp(25px,5vw,54px) 24px;text-align:center;border:1px solid #ffffff35;border-radius:25px;background:linear-gradient(145deg,#111923eF,#211722ed);box-shadow:0 30px 100px #000b;backdrop-filter:blur(10px);animation:wwFxRise .8s cubic-bezier(.16,1,.3,1) both}
+ #wwDeathFx .wwfx-symbol{font-size:clamp(76px,15vw,130px);line-height:1.2;filter:drop-shadow(0 0 25px var(--fx-glow));animation:wwFxPulse 1.7s ease-in-out infinite}
+ #wwDeathFx .wwfx-kicker{font-size:10px;letter-spacing:5px;color:#d5b98c;font-weight:900;margin:14px 0}
+ #wwDeathFx h2{font-size:clamp(28px,6vw,48px);line-height:1.12;margin:8px 0 12px;font-weight:1000;text-shadow:0 5px 25px #000}
+ #wwDeathFx p{color:#d4d8df;font-size:14px;line-height:1.7;margin:0 auto;max-width:440px}
+ #wwDeathFx .wwfx-progress{height:3px;width:min(300px,80%);margin:25px auto 0;background:#ffffff20;border-radius:10px;overflow:hidden}
+ #wwDeathFx .wwfx-progress:after{content:'';display:block;height:100%;width:100%;background:var(--fx-accent);transform-origin:left;animation:wwFxTimer 5.8s linear forwards}
+ #wwDeathFx.wolf{--fx-glow:#c33142;--fx-accent:#d54a58}
+ #wwDeathFx.poison{--fx-glow:#63d48b;--fx-accent:#69d98b;background:radial-gradient(ellipse at 50% 42%,#163c2d 0%,#091611 50%,#020705 100%)}
+ #wwDeathFx.vote{--fx-glow:#d5ad73;--fx-accent:#c9a16c;background:radial-gradient(ellipse at 50% 42%,#3a2c20 0%,#15100d 50%,#030303 100%)}
+ #wwDeathFx .wwfx-particles{position:absolute;inset:0;pointer-events:none;opacity:.7;background:radial-gradient(circle at 15% 75%,#ffffff35 0 1px,transparent 3px),radial-gradient(circle at 82% 22%,#ffffff30 0 2px,transparent 4px),radial-gradient(circle at 70% 80%,var(--fx-glow)55 0 2px,transparent 5px);animation:wwFxDrift 5s ease-in-out infinite alternate}
+ #wwDeathFx .wwfx-close{margin-top:23px;border:1px solid #ffffff55;border-radius:999px;background:#ffffff12;color:#fff;padding:10px 24px;font-weight:800;cursor:pointer}
+ @keyframes wwFxFade{from{opacity:0}to{opacity:1}}@keyframes wwFxRise{from{opacity:0;transform:translateY(28px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes wwFxPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 15px var(--fx-glow))}50%{transform:scale(1.09);filter:drop-shadow(0 0 35px var(--fx-glow))}}@keyframes wwFxDrift{from{transform:translate3d(-2%,1%,0)}to{transform:translate3d(2%,-2%,0)}}@keyframes wwFxTimer{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+ @media(prefers-reduced-motion:reduce){#wwDeathFx *,#wwDeathFx:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+ `;document.head.appendChild(st);
+}
+function showWerewolfDeathEffect(event,roomId){
+ if(!event?.id||!['wolf','poison','vote'].includes(event.cause))return;
+ const key=`gcWWDeathShown:${roomId}:${event.id}`;
+ try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
+ const copy={wolf:{icon:'🐺',kicker:'THE HUNT IS OVER',title:'คุณถูกหมาป่าล่า',desc:'เสียงคำรามดังขึ้นในความมืด… ฝูงหมาป่าเลือกคุณเป็นเหยื่อในคืนนี้',sound:'wolfAttack'},poison:{icon:'☠️',kicker:'A DEADLY BREW',title:'คุณถูกวางยาพิษ',desc:'พิษร้ายค่อย ๆ แผ่ซ่าน ร่างกายของคุณไม่อาจต้านทานมันได้',sound:'poison'},vote:{icon:'⚖️',kicker:'THE VILLAGE HAS SPOKEN',title:'คุณถูกโหวตประหาร',desc:'เสียงลงคะแนนของหมู่บ้านสิ้นสุดลง และชะตาของคุณถูกตัดสินแล้ว',sound:'voteResult'}}[event.cause];
+ if(!copy)return;
+ document.getElementById('wwDeathFx')?.remove();
+ const el=document.createElement('div');el.id='wwDeathFx';el.className=event.cause;el.setAttribute('role','alertdialog');el.setAttribute('aria-modal','true');
+ el.innerHTML=`<div class="wwfx-particles"></div><div class="wwfx-card"><div class="wwfx-symbol">${copy.icon}</div><div class="wwfx-kicker">${copy.kicker}</div><h2>${copy.title}</h2><p>${copy.desc}</p><div class="wwfx-progress"></div><button class="wwfx-close" type="button">รับทราบ</button></div><div class="wwfx-vignette"></div>`;
+ document.body.appendChild(el);GCSound.play(copy.sound);
+ let timer=setTimeout(()=>el.remove(),6500);const close=()=>{clearTimeout(timer);el.remove()};el.querySelector('.wwfx-close').addEventListener('click',close);el.addEventListener('click',e=>{if(e.target===el)close()});
+}
+
 function installReportsNav(){
  const first=document.querySelector('.nav-item[data-page="dashboard"]');if(!first)return;
  const nav=first.parentElement;
@@ -189,7 +225,7 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
@@ -650,6 +686,10 @@ async function loadWerewolf(roomId, forceLobby=false){
   if(old.me?.alive!==false&&now.me?.alive===false)GCSound.play('death');
   if(!old.me?.role&&now.me?.role){const roleSound={wolf:'wolf',seer:'seer',witch:'witch',bodyguard:'protect',guardian:'protect',hunter:'hunter',jester:'jester',villager:'start'};GCSound.play(roleSound[now.me.role]||'start');}
   if(JSON.stringify(old.me?.seerResult||null)!==JSON.stringify(now.me?.seerResult||null)&&now.me?.seerResult)GCSound.play('seer');
+ }
+ if(now?.me?.deathEvent&&now.me.alive===false){
+  const previousId=old?.me?.deathEvent?.id;
+  if(previousId!==now.me.deathEvent.id)showWerewolfDeathEffect(now.me.deathEvent,now.id);
  }
  werewolfState=next;
  if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
