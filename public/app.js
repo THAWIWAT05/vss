@@ -619,7 +619,8 @@ async function loadWerewolf(roomId, forceLobby=false){
  else if(werewolfForceLobby){roomId='';}
  else roomId=roomId||localStorage.getItem('gcWerewolfRoom')||'';
  const requestSeq=++werewolfRequestSeq;
- const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
+ const showLobby=forceLobby||werewolfForceLobby;
+ const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:(showLobby?'?lobby=1':'');
  const before=werewolfState?JSON.stringify(werewolfState):'';
  const next=await api('/api/werewolf'+q);
  if(requestSeq!==werewolfRequestSeq)return;
@@ -651,13 +652,15 @@ async function loadWerewolf(roomId, forceLobby=false){
   if(JSON.stringify(old.me?.seerResult||null)!==JSON.stringify(now.me?.seerResult||null)&&now.me?.seerResult)GCSound.play('seer');
  }
  werewolfState=next;
+ if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
+ if(!next?.room&&roomId)localStorage.removeItem('gcWerewolfRoom');
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
 }
 async function werewolfPost(path,body={}){await api(path,{method:'POST',body:JSON.stringify(body)});await loadWerewolf(werewolfState?.room?.id);}
 function werewolf(){
  installGameScrollStyles();
  const rooms=werewolfState?.rooms||[],r=werewolfState?.room,players=r?.players||[],p=r?.me,phase=r?.phase;
- const phases={lobby:'ห้องรอผู้เล่น',night:'กลางคืน',day:'กลางวัน · อภิปราย',vote:'ลงคะแนน',finished:'จบเกม'};
+ const phases={lobby:'ห้องรอผู้เล่น',night:'กลางคืน',day:'กลางวัน · อภิปราย',vote:'ลงคะแนน',hunter_shot:'นายพรานลั่นไก',finished:'จบเกม'};
  const header=`<div class="ww-hero"><div><div class="ww-kicker">GANG CONTROL · SOCIAL DEDUCTION</div><h2>🐺 WEREWOLF</h2><p>หมู่บ้านที่เต็มไปด้วยความลับ ใครคือหมาป่าที่ซ่อนอยู่?</p></div><div class="ww-pill">● ${r?phases[phase]||phase:'PUBLIC LOBBY'}</div></div>`;
  const rules=`<section class="ww-panel"><h3>📜 วิธีเล่น</h3><div class="ww-rule"><span>1</span><div><b>รับบทบาทลับ</b><div class="ww-muted">หมาป่า ผู้หยั่งรู้ แม่มด และชาวบ้าน จะถูกสุ่มให้อัตโนมัติ</div></div></div><div class="ww-rule"><span>2</span><div><b>กลางคืน</b><div class="ww-muted">หมาป่าเลือกเหยื่อ ผู้หยั่งรู้ตรวจสอบหนึ่งคน แม่มดเลือกใช้ยาช่วยหรือยาพิษ</div></div></div><div class="ww-rule"><span>3</span><div><b>กลางวัน</b><div class="ww-muted">ทุกคนอภิปรายกันในเกม แล้วเจ้าของห้องกดเปิดโหวตเพื่อเลือกผู้ต้องสงสัย</div></div></div><div class="ww-rule"><span>4</span><div><b>เงื่อนไขชนะ</b><div class="ww-muted">ชาวบ้านชนะเมื่อกำจัดหมาป่าหมด · หมาป่าชนะเมื่อมีจำนวนเท่ากับหรือมากกว่าฝ่ายอื่น</div></div></div></section>`;
  if(!r)return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-grid"><section class="ww-panel"><div class="ww-kicker">CREATE YOUR VILLAGE</div><h3 style="font-size:22px">เปิดหมู่บ้านใหม่</h3><p class="ww-muted">รองรับ 4–16 คน · สุ่มบทบาทอัตโนมัติ · เล่นพร้อมกันแบบเรียลไทม์</p><div class="ww-field" style="margin:14px 0"><label>ชื่อห้อง</label><input id="wwTitle" maxlength="50" value="หมู่บ้านรัตติกาล"></div><button class="ww-btn" id="wwCreate">＋ สร้างห้องใหม่</button></section><section class="ww-panel"><div class="ww-kicker">HOW TO PLAY</div>${rules}</section></div><section class="ww-panel"><h3>เข้าร่วมด้วยรหัสห้อง</h3><div class="ww-muted">กรอกรหัส 6 หลักจากเจ้าของห้อง</div><div style="display:flex;gap:8px;margin-top:12px"><input id="wwJoinCode" inputmode="numeric" maxlength="6" placeholder="รหัสห้อง 6 หลัก" style="min-width:0;flex:1;border:1px solid #4a5a70;background:#101824;color:#fff;border-radius:9px;padding:11px"><button class="ww-btn" id="wwJoinCodeBtn">เข้าร่วม</button></div></section><section class="ww-panel"><div class="ww-room"><div><h3>หมู่บ้านที่เปิดอยู่</h3><div class="ww-muted">เลือกห้องที่ยังรอผู้เล่น</div></div><button class="ww-btn ghost" id="wwRefresh">↻ รีเฟรช</button></div><div style="display:grid;gap:9px;margin-top:13px">${rooms.map(x=>`<div class="ww-lobby-card"><div><b>${esc(x.title)}</b><div class="ww-muted">เจ้าของ ${esc(x.hostName)} · ${x.playerCount}/16 คน</div><div class="ww-code" style="font-size:14px">${esc(x.code)}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${werewolfState?.isAdmin?`<button class="ww-btn red" data-ww-delete="${esc(x.id)}">ลบห้อง</button>`:''}<button class="ww-btn" data-ww-join="${esc(x.id)}">เข้าร่วมห้อง</button></div></div>`).join('')||'<div class="ww-muted" style="padding:20px;text-align:center">ยังไม่มีหมู่บ้านที่เปิดอยู่</div>'}</div></section></div></section>`;
@@ -750,7 +753,8 @@ function updateBingoCountdown(){
  if(ring)ring.style.setProperty('--progress',`${((7-left)/7*360)}deg`);
 }
 async function loadBingo(roomId){
- const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:'';
+ const showLobby=forceLobby||werewolfForceLobby;
+ const q=roomId?`?roomId=${encodeURIComponent(roomId)}`:(showLobby?'?lobby=1':'');
  const before=bingoState?JSON.stringify(bingoState):'';
  const oldRoom=bingoState?.room||null;
  const previous=bingoState?.room?.winners|| (bingoState?.room?.winner?[bingoState.room.winner]:[]);
