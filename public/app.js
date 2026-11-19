@@ -104,36 +104,72 @@ function installWerewolfStyles(){if($('#werewolfStyles'))return;const st=documen
 function installWerewolfDeathEffects(){
  if($('#wwDeathFxStyles'))return;
  const st=document.createElement('style');st.id='wwDeathFxStyles';st.textContent=`
- #wwDeathFx{position:fixed;inset:0;z-index:30000;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 42%,#38202a 0%,#100d15 48%,#030509 100%);color:#fff;overflow:hidden;animation:wwFxFade .45s ease both;font-family:inherit}
- #wwDeathFx:before{content:'';position:absolute;inset:-30%;background:repeating-linear-gradient(115deg,transparent 0 35px,#ffffff08 36px 38px);animation:wwFxDrift 7s linear infinite}
- #wwDeathFx .wwfx-vignette{position:absolute;inset:0;box-shadow:inset 0 0 150px 45px #000;pointer-events:none}
- #wwDeathFx .wwfx-card{position:relative;z-index:2;width:min(680px,calc(100vw - 34px));padding:clamp(25px,5vw,54px) 24px;text-align:center;border:1px solid #ffffff35;border-radius:25px;background:linear-gradient(145deg,#111923eF,#211722ed);box-shadow:0 30px 100px #000b;backdrop-filter:blur(10px);animation:wwFxRise .8s cubic-bezier(.16,1,.3,1) both}
- #wwDeathFx .wwfx-symbol{font-size:clamp(76px,15vw,130px);line-height:1.2;filter:drop-shadow(0 0 25px var(--fx-glow));animation:wwFxPulse 1.7s ease-in-out infinite}
- #wwDeathFx .wwfx-kicker{font-size:10px;letter-spacing:5px;color:#d5b98c;font-weight:900;margin:14px 0}
- #wwDeathFx h2{font-size:clamp(28px,6vw,48px);line-height:1.12;margin:8px 0 12px;font-weight:1000;text-shadow:0 5px 25px #000}
- #wwDeathFx p{color:#d4d8df;font-size:14px;line-height:1.7;margin:0 auto;max-width:440px}
- #wwDeathFx .wwfx-progress{height:3px;width:min(300px,80%);margin:25px auto 0;background:#ffffff20;border-radius:10px;overflow:hidden}
- #wwDeathFx .wwfx-progress:after{content:'';display:block;height:100%;width:100%;background:var(--fx-accent);transform-origin:left;animation:wwFxTimer 5.8s linear forwards}
- #wwDeathFx.wolf{--fx-glow:#c33142;--fx-accent:#d54a58}
- #wwDeathFx.poison{--fx-glow:#63d48b;--fx-accent:#69d98b;background:radial-gradient(ellipse at 50% 42%,#163c2d 0%,#091611 50%,#020705 100%)}
- #wwDeathFx.vote{--fx-glow:#d5ad73;--fx-accent:#c9a16c;background:radial-gradient(ellipse at 50% 42%,#3a2c20 0%,#15100d 50%,#030303 100%)}
- #wwDeathFx .wwfx-particles{position:absolute;inset:0;pointer-events:none;opacity:.7;background:radial-gradient(circle at 15% 75%,#ffffff35 0 1px,transparent 3px),radial-gradient(circle at 82% 22%,#ffffff30 0 2px,transparent 4px),radial-gradient(circle at 70% 80%,var(--fx-glow)55 0 2px,transparent 5px);animation:wwFxDrift 5s ease-in-out infinite alternate}
- #wwDeathFx .wwfx-close{margin-top:23px;border:1px solid #ffffff55;border-radius:999px;background:#ffffff12;color:#fff;padding:10px 24px;font-weight:800;cursor:pointer}
- @keyframes wwFxFade{from{opacity:0}to{opacity:1}}@keyframes wwFxRise{from{opacity:0;transform:translateY(28px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes wwFxPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 15px var(--fx-glow))}50%{transform:scale(1.09);filter:drop-shadow(0 0 35px var(--fx-glow))}}@keyframes wwFxDrift{from{transform:translate3d(-2%,1%,0)}to{transform:translate3d(2%,-2%,0)}}@keyframes wwFxTimer{from{transform:scaleX(1)}to{transform:scaleX(0)}}
- @media(prefers-reduced-motion:reduce){#wwDeathFx *,#wwDeathFx:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+ #wwDeathFx{--fx:#c83b4b;position:fixed;inset:0;z-index:30000;overflow:hidden;background:#030508;color:#fff;font-family:inherit;isolation:isolate;perspective:1100px;animation:wwSceneIn .7s ease both}
+ #wwDeathFx *{box-sizing:border-box}
+ #wwDeathFx .ww3d-world{position:absolute;inset:-8%;transform-style:preserve-3d;animation:wwCamera 8s cubic-bezier(.18,.62,.28,1) both}
+ #wwDeathFx .ww3d-sky{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 38%,color-mix(in srgb,var(--fx) 24%,#111 76%),#080b10 48%,#010204 100%);transform:translateZ(-180px) scale(1.2)}
+ #wwDeathFx .ww3d-horizon{position:absolute;left:-10%;right:-10%;top:48%;height:75%;background:linear-gradient(180deg,#0b1015 0%,#030507 65%);clip-path:polygon(0 8%,100% 0,100% 100%,0 100%);transform:rotateX(62deg) translateZ(-40px);transform-origin:top;box-shadow:0 -20px 70px #000}
+ #wwDeathFx .ww3d-beam{position:absolute;top:-15%;left:50%;width:55vw;height:110vh;transform:translateX(-50%) translateZ(-80px);background:linear-gradient(180deg,color-mix(in srgb,var(--fx) 22%,transparent),transparent 78%);filter:blur(24px);opacity:.75}
+ #wwDeathFx .ww3d-object{position:absolute;left:50%;top:47%;width:min(78vw,850px);height:min(66vh,650px);transform:translate(-50%,-50%) translateZ(80px);transform-style:preserve-3d;display:grid;place-items:center}
+ #wwDeathFx .ww3d-object svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 25px 30px #000) drop-shadow(0 0 35px color-mix(in srgb,var(--fx) 65%,transparent))}
+ #wwDeathFx .ww3d-object .wolf-shape{fill:#080b10;stroke:#8d2938;stroke-width:1.5}
+ #wwDeathFx .ww3d-object .wolf-eye{fill:#ff5360;filter:drop-shadow(0 0 12px #ff263e)}
+ #wwDeathFx .ww3d-floor{position:absolute;left:-20%;right:-20%;bottom:-35%;height:70%;background:repeating-linear-gradient(90deg,transparent 0 9vw,#ffffff0b 9.1vw 9.2vw),linear-gradient(180deg,transparent,#000 65%);transform:rotateX(72deg) translateZ(35px);transform-origin:top}
+ #wwDeathFx .ww3d-ring{position:absolute;width:min(55vw,520px);aspect-ratio:1;border:1px solid color-mix(in srgb,var(--fx) 65%,transparent);border-radius:50%;transform:rotateX(72deg) translateZ(5px);box-shadow:0 0 45px color-mix(in srgb,var(--fx) 30%,transparent),inset 0 0 35px color-mix(in srgb,var(--fx) 20%,transparent);animation:wwRing 3s ease-in-out infinite}
+ #wwDeathFx .ww3d-smoke{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 20% 80%,#aab6c21c,transparent 28%),radial-gradient(ellipse at 75% 70%,var(--fx)22,transparent 30%),radial-gradient(ellipse at 50% 15%,#ffffff12,transparent 35%);filter:blur(18px);animation:wwSmoke 5s ease-in-out infinite alternate}
+ #wwDeathFx .ww3d-particles{position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,#ffffffb0 0 1px,transparent 2px),radial-gradient(circle,var(--fx) 0 1.5px,transparent 3px);background-size:97px 113px,151px 179px;background-position:0 0,35px 70px;opacity:.45;animation:wwAsh 9s linear infinite}
+ #wwDeathFx .ww3d-title{position:absolute;z-index:5;left:7vw;right:7vw;bottom:8vh;text-align:left;text-shadow:0 4px 28px #000;animation:wwTitleIn 1s .55s both}
+ #wwDeathFx .ww3d-title small{display:block;color:color-mix(in srgb,var(--fx) 70%,#fff);font-size:10px;font-weight:1000;letter-spacing:5px;margin-bottom:10px}
+ #wwDeathFx .ww3d-title h2{font-size:clamp(30px,6vw,68px);font-weight:1000;letter-spacing:1px;line-height:1;margin:0 0 12px}
+ #wwDeathFx .ww3d-title p{max-width:560px;color:#d3d7dc;font-size:clamp(12px,1.5vw,15px);line-height:1.7;margin:0}
+ #wwDeathFx .ww3d-skip{position:absolute;z-index:8;right:22px;top:20px;border:1px solid #ffffff45;border-radius:3px;background:#05070a88;color:#fff;padding:9px 14px;font-size:11px;font-weight:900;letter-spacing:1px;cursor:pointer;backdrop-filter:blur(8px)}
+ #wwDeathFx .ww3d-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;animation:wwFlash 8s ease both}
+ #wwDeathFx.wolf{--fx:#cf3046}
+ #wwDeathFx.poison{--fx:#48c982}
+ #wwDeathFx.vote{--fx:#c7a16c}
+ #wwDeathFx.poison .ww3d-object{width:min(62vw,620px);height:min(62vh,620px)}
+ #wwDeathFx.poison .ww3d-object svg{filter:drop-shadow(0 0 45px #38e78a88)}
+ #wwDeathFx.vote .ww3d-object{width:min(65vw,700px);height:min(72vh,700px);top:43%}
+ #wwDeathFx.vote .ww3d-object svg{filter:drop-shadow(0 25px 25px #000) drop-shadow(0 0 24px #c49a5c66)}
+ #wwDeathFx.wolf .ww3d-object{animation:wwWolfLunge 2.8s .35s cubic-bezier(.16,.8,.2,1) both}
+ #wwDeathFx.poison .ww3d-object{animation:wwPoisonFloat 5s ease-in-out infinite}
+ #wwDeathFx.vote .ww3d-object{animation:wwExecution 2.4s .6s cubic-bezier(.5,0,.8,.3) both}
+ #wwDeathFx.wolf .ww3d-ring{animation:wwRing 2s ease-out infinite}
+ #wwDeathFx.poison .ww3d-ring{animation:wwRing 4s ease-in-out infinite}
+ #wwDeathFx.vote .ww3d-ring{border-style:dashed;animation:wwRing 5s linear infinite}
+ @keyframes wwSceneIn{from{opacity:0}to{opacity:1}}
+ @keyframes wwCamera{0%{transform:translateZ(-120px) scale(1.15)}45%{transform:translateZ(20px) scale(1.03)}100%{transform:translateZ(70px) scale(1)}}
+ @keyframes wwRing{0%{transform:rotateX(72deg) rotateZ(0) scale(.7);opacity:0}35%{opacity:.8}100%{transform:rotateX(72deg) rotateZ(180deg) scale(1.25);opacity:0}}
+ @keyframes wwSmoke{from{transform:translate3d(-2%,2%,0) scale(1)}to{transform:translate3d(3%,-3%,0) scale(1.13)}}
+ @keyframes wwAsh{from{background-position:0 0,35px 70px}to{background-position:0 -420px,35px -570px}}
+ @keyframes wwTitleIn{from{opacity:0;transform:translateY(28px);filter:blur(8px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+ @keyframes wwWolfLunge{0%{transform:translate(-50%,-50%) translateZ(-220px) scale(.55) rotateY(-18deg);opacity:0}45%{opacity:1}72%{transform:translate(-50%,-50%) translateZ(160px) scale(1.18) rotateY(8deg)}100%{transform:translate(-50%,-50%) translateZ(60px) scale(1.02)}}
+ @keyframes wwPoisonFloat{0%,100%{transform:translate(-50%,-50%) translateZ(60px) rotateY(-12deg) rotateZ(-3deg) scale(.94)}50%{transform:translate(-50%,-53%) translateZ(150px) rotateY(14deg) rotateZ(5deg) scale(1.08)}}
+ @keyframes wwExecution{0%{transform:translate(-50%,-65%) translateZ(-80px) rotateX(-35deg) scale(.85)}55%{transform:translate(-50%,-42%) translateZ(140px) rotateX(22deg) scale(1.12)}100%{transform:translate(-50%,-48%) translateZ(60px) rotateX(0) scale(1)}}
+ @keyframes wwFlash{0%,38%,100%{opacity:0}42%{opacity:.75}46%{opacity:0}68%{opacity:0}70%{opacity:.28}73%{opacity:0}}
+ @media(max-width:600px){#wwDeathFx .ww3d-object{width:110vw;height:58vh;top:42%}#wwDeathFx .ww3d-title{bottom:9vh;left:22px;right:22px}#wwDeathFx .ww3d-title h2{font-size:34px}#wwDeathFx .ww3d-title small{letter-spacing:3px}}
+ @media(prefers-reduced-motion:reduce){#wwDeathFx *,#wwDeathFx .ww3d-world{animation-duration:.01ms!important;animation-iteration-count:1!important}}
  `;document.head.appendChild(st);
 }
 function showWerewolfDeathEffect(event,roomId){
  if(!event?.id||!['wolf','poison','vote'].includes(event.cause))return;
  const key=`gcWWDeathShown:${roomId}:${event.id}`;
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
- const copy={wolf:{icon:'🐺',kicker:'THE HUNT IS OVER',title:'คุณถูกหมาป่าล่า',desc:'เสียงคำรามดังขึ้นในความมืด… ฝูงหมาป่าเลือกคุณเป็นเหยื่อในคืนนี้',sound:'wolfAttack'},poison:{icon:'☠️',kicker:'A DEADLY BREW',title:'คุณถูกวางยาพิษ',desc:'พิษร้ายค่อย ๆ แผ่ซ่าน ร่างกายของคุณไม่อาจต้านทานมันได้',sound:'poison'},vote:{icon:'⚖️',kicker:'THE VILLAGE HAS SPOKEN',title:'คุณถูกโหวตประหาร',desc:'เสียงลงคะแนนของหมู่บ้านสิ้นสุดลง และชะตาของคุณถูกตัดสินแล้ว',sound:'voteResult'}}[event.cause];
+ const copy={
+  wolf:{kicker:'NIGHT HUNT · FATAL ENCOUNTER',title:'คุณถูกหมาป่าล่า',desc:'เงาร่างนักล่าพุ่งออกมาจากความมืด… คืนนี้คุณคือเหยื่อของฝูงหมาป่า',sound:'wolfAttack'},
+  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'หมอกพิษสีเขียวคืบคลานเข้าปกคลุมทุกสิ่ง… ร่างกายค่อย ๆ หมดแรงลง',sound:'poison'},
+  vote:{kicker:'THE VILLAGE · FINAL VERDICT',title:'คุณถูกโหวตประหาร',desc:'คำตัดสินของหมู่บ้านได้สิ้นสุดลง… ไม่มีใครเปลี่ยนชะตาครั้งนี้ได้',sound:'voteResult'}
+ }[event.cause];
  if(!copy)return;
  document.getElementById('wwDeathFx')?.remove();
- const el=document.createElement('div');el.id='wwDeathFx';el.className=event.cause;el.setAttribute('role','alertdialog');el.setAttribute('aria-modal','true');
- el.innerHTML=`<div class="wwfx-particles"></div><div class="wwfx-card"><div class="wwfx-symbol">${copy.icon}</div><div class="wwfx-kicker">${copy.kicker}</div><h2>${copy.title}</h2><p>${copy.desc}</p><div class="wwfx-progress"></div><button class="wwfx-close" type="button">รับทราบ</button></div><div class="wwfx-vignette"></div>`;
+ let visual='';
+ if(event.cause==='wolf')visual=`<svg viewBox="0 0 800 600" aria-hidden="true"><path class="wolf-shape" d="M110 475 150 350 118 230 220 280 280 150 365 235 440 190 520 250 665 215 610 330 680 410 570 390 520 500 420 430 320 510 270 420 180 500Z"/><path class="wolf-shape" d="M235 310 315 255 410 265 500 320 435 390 330 405Z"/><path class="wolf-eye" d="M365 315 405 304 394 326Z"/><path class="wolf-eye" d="M465 315 500 305 489 328Z"/><path class="wolf-shape" d="M400 382 455 380 430 415Z"/></svg>`;
+ else if(event.cause==='poison')visual=`<svg viewBox="0 0 600 600" aria-hidden="true"><defs><radialGradient id="wwPoisonOrb"><stop stop-color="#caffdf" stop-opacity=".95"/><stop offset=".35" stop-color="#39e985" stop-opacity=".75"/><stop offset="1" stop-color="#087a4a" stop-opacity=".02"/></radialGradient></defs><circle cx="300" cy="300" r="210" fill="url(#wwPoisonOrb)"/><g fill="none" stroke="#8fffc0" stroke-width="5" opacity=".65"><path d="M180 470C90 360 250 300 170 190S250 70 280 30"/><path d="M390 560C500 440 330 350 450 250S390 110 500 40"/><path d="M300 570C230 450 390 390 300 280S350 120 300 40"/></g><g fill="#d5ffe4"><circle cx="170" cy="180" r="9"/><circle cx="440" cy="245" r="7"/><circle cx="320" cy="90" r="6"/><circle cx="260" cy="430" r="8"/></g></svg>`;
+ else visual=`<svg viewBox="0 0 700 650" aria-hidden="true"><path d="M210 60H500V130H440V470H390V130H270V470H220V130H210Z" fill="#151719" stroke="#8c7558" stroke-width="8"/><path d="M155 170H555L520 230H190Z" fill="#b9a17c" stroke="#e4c99f" stroke-width="7"/><path d="M330 210H380L420 500H290Z" fill="#272b30" stroke="#b99b6e" stroke-width="8"/><path d="M255 500H455L485 535H225Z" fill="#111" stroke="#8c7558" stroke-width="7"/><path d="M350 240V455" stroke="#f4dfbd" stroke-width="4" opacity=".55"/></svg>`;
+ const el=document.createElement('div');el.id='wwDeathFx';el.className=event.cause;el.setAttribute('role','alert');
+ el.innerHTML=`<div class="ww3d-world"><div class="ww3d-sky"></div><div class="ww3d-beam"></div><div class="ww3d-horizon"></div><div class="ww3d-floor"></div><div class="ww3d-ring"></div><div class="ww3d-object">${visual}</div><div class="ww3d-smoke"></div><div class="ww3d-particles"></div></div><div class="ww3d-title"><small>${copy.kicker}</small><h2>${copy.title}</h2><p>${copy.desc}</p></div><button class="ww3d-skip" type="button">ข้ามฉาก ×</button><div class="ww3d-flash"></div>`;
  document.body.appendChild(el);GCSound.play(copy.sound);
- let timer=setTimeout(()=>el.remove(),6500);const close=()=>{clearTimeout(timer);el.remove()};el.querySelector('.wwfx-close').addEventListener('click',close);el.addEventListener('click',e=>{if(e.target===el)close()});
+ const close=()=>{el.remove()};const timer=setTimeout(close,8200);el.querySelector('.ww3d-skip').addEventListener('click',()=>{clearTimeout(timer);close()});
 }
 
 function installReportsNav(){
