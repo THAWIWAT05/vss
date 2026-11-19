@@ -205,11 +205,64 @@ function makeBingoCard(){
  const card=[];for(let col=0;col<5;col++){const min=col*15+1,max=min+14,nums=[];while(nums.length<5){const n=Math.floor(Math.random()*(max-min+1))+min;if(!nums.includes(n))nums.push(n)}for(let row=0;row<5;row++)card[row*5+col]=nums[row]}card[12]=null;return card;
 }
 function roomFor(db,id){return (db.bingoRooms||[]).find(r=>String(r.id)===String(id));}
-function bingoLines(){const lines=[];for(let y=0;y<5;y++)lines.push(Array.from({length:5},(_,x)=>y*5+x));for(let x=0;x<5;x++)lines.push(Array.from({length:5},(_,y)=>y*5+x));lines.push([0,6,12,18,24],[4,8,12,16,20]);return lines;}
-function bingoWinningLine(player){const marked=player.marked||[];const line=bingoLines().find(line=>line.every(i=>marked[i]));if(!line)return null;return {line:line[1]===6||line[1]===8?'แนวทแยง':line[0]<5?'แนวนอน':line[0]%5===0?'แนวตั้ง':'BINGO',indices:line};}
+function bingoLines(){
+ const lines=[];
+ // แนวนอนและแนวตั้งต้องครบ 5 ช่อง
+ for(let y=0;y<5;y++)lines.push(Array.from({length:5},(_,x)=>y*5+x));
+ for(let x=0;x<5;x++)lines.push(Array.from({length:5},(_,y)=>y*5+x));
+ // แนวทแยงชนะเมื่อมี 4 ช่องติดกัน ทั้งสองทิศทางและทุกตำแหน่ง
+ for(let y=0;y<=1;y++)for(let x=0;x<=1;x++)lines.push(Array.from({length:4},(_,k)=>(y+k)*5+(x+k)));
+ for(let y=0;y<=1;y++)for(let x=3;x<=4;x++)lines.push(Array.from({length:4},(_,k)=>(y+k)*5+(x-k)));
+ return lines;
+}
+function bingoWinningLine(player){
+ const marked=player.marked||[];const line=bingoLines().find(line=>line.every(i=>marked[i]));if(!line)return null;
+ const step=line[1]-line[0];const label=Math.abs(step)===4||Math.abs(step)===6?'แนวทแยง (4 ช่อง)':step===1?'แนวนอน (5 ช่อง)':'แนวตั้ง (5 ช่อง)';
+ return {line:label,indices:line};
+}
 function bingoCanStillWin(room,player){return bingoLines().some(line=>line.every(i=>i===12||room.drawn.includes(player.card[i])));}
 function checkBingoWinnerForPlayer(room,player){const result=bingoWinningLine(player);if(!result)return null;if(!Array.isArray(room.winners))room.winners=room.winner?[room.winner]:[];if(room.winners.some(w=>String(w.userId)===String(player.userId)))return null;const winner={userId:player.userId,name:player.name,line:result.line,claimedAt:isoNow()};room.winners.push(winner);room.winner=room.winner||winner;room.status='finished';room.finishedAt=room.finishedAt||isoNow();return winner;}
-function cleanupBingoRooms(db){if(!Array.isArray(db.bingoRooms))db.bingoRooms=[];const now=Date.now();const before=db.bingoRooms.length;db.bingoRooms=db.bingoRooms.filter(r=>{const players=Array.isArray(r.players)?r.players:[];const last=Date.parse(r.lastActivityAt||r.createdAt||0)||0;if(r.status==='closed'||(r.status==='waiting'&&!players.length)||(r.status==='waiting'&&now-last>15*60*1000)||(r.status==='playing'&&now-last>30*60*1000))return false;return true;});return before!==db.bingoRooms.length;}
+function cleanupBingoRooms(db){
+ if(!Array.isArray(db.bingoRooms))db.bingoRooms=[];
+ const now=Date.now(),before=db.bingoRooms.length;
+ db.bingoRooms=db.bingoRooms.filter(r=>{
+  const players=Array.isArray(r.players)?r.players:[];
+  const last=Date.parse(r.lastActivityAt||r.createdAt||0)||0;
+  const finished=Date.parse(r.finishedAt||r.lastActivityAt||r.createdAt||0)||now;
+  if(r.status==='closed'||(r.status==='waiting'&&!players.length)||(r.status==='waiting'&&now-last>15*60*1000)||(r.status==='playing'&&now-last>30*60*1000)||(r.status==='finished'&&now-finished>60*60*1000))return false;
+  return true;
+ });
+ return before!==db.bingoRooms.length;
+}
+
+// Server-side BINGO clock: draws continue even when every player closes the page.
+// The PostgreSQL row lock serializes this worker with normal API requests and other instances.
+async function runBingoScheduler(){
+ let client;
+ try{
+  client=await pool.connect();
+  await client.query('BEGIN');
+  const result=await client.query('SELECT data FROM app_state WHERE id = 1 FOR UPDATE');
+  if(!result.rows.length){await client.query('ROLLBACK');return;}
+  const db=normalizeDB(result.rows[0].data);
+  const now=Date.now(),stamp=isoNow();
+  let changed=cleanupBingoRooms(db);
+  for(const room of db.bingoRooms){
+   if(room.status!=='playing'||now<(Number(room.nextDrawAt)||0))continue;
+   const drawn=Array.isArray(room.drawn)?room.drawn:[];
+   const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!drawn.includes(n));
+   if(!remaining.length){room.status='finished';room.finishedAt=room.finishedAt||stamp;room.lastActivityAt=stamp;changed=true;continue;}
+   const number=remaining[Math.floor(Math.random()*remaining.length)];
+   drawn.push(number);room.drawn=drawn;room.lastActivityAt=stamp;
+   room.nextDrawAt=now+7000;
+   if(drawn.length>=75){room.status='finished';room.finishedAt=stamp;}
+   changed=true;
+  }
+  if(changed)await client.query('UPDATE app_state SET data = $1::jsonb, updated_at = NOW() WHERE id = 1',[JSON.stringify(db)]);
+  await client.query('COMMIT');
+ }catch(err){if(client){try{await client.query('ROLLBACK')}catch(_){}}console.error('BINGO scheduler error:',err.message)}
+ finally{if(client)client.release();}
+}
 function bingoRoomPublic(room,req){if(!room)return null;const user=req.session.user,p=room.players.find(x=>String(x.userId)===String(user.id))||null;return {id:room.id,title:room.title,status:room.status,hostId:room.hostId,hostName:room.hostName,drawn:room.drawn,winner:room.winner,winners:room.winners|| (room.winner?[room.winner]:[]),nextDrawAt:room.nextDrawAt,serverNow:Date.now(),createdAt:room.createdAt,startedAt:room.startedAt,players:room.players.map(x=>({userId:x.userId,name:x.name,winner:!!((room.winners|| (room.winner?[room.winner]:[])).some(w=>String(w.userId)===String(x.userId)))})),player:p?{card:p.card,marked:p.marked}:null,isHost:String(room.hostId)===String(user.id),canStillWin:p?bingoCanStillWin(room,p):false};}
 app.get('/api/bingo',auth,(req,res)=>{const db=readDB();const changed=cleanupBingoRooms(db);if(changed)writeDB(db);const rooms=db.bingoRooms.filter(r=>r.status==='waiting'||r.status==='playing').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(r=>({id:r.id,title:r.title,status:r.status,hostName:r.hostName,playerCount:r.players.length,createdAt:r.createdAt}));const room=req.query.roomId?roomFor(db,req.query.roomId):null;res.json({rooms,room:bingoRoomPublic(room,req),serverNow:Date.now()});});
 app.post('/api/bingo/create',auth,(req,res)=>{const db=readDB();if(!Array.isArray(db.bingoRooms))db.bingoRooms=[];const title=String(req.body?.title||'BINGO ROOM').trim().slice(0,60);if(!title)return res.status(400).json({error:'กรุณาตั้งชื่อห้อง'});const room={id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,title,status:'waiting',hostId:req.session.user.id,hostName:req.session.user.name,drawn:[],players:[],winner:null,createdAt:isoNow(),startedAt:null,nextDrawAt:null};room.lastActivityAt=isoNow();db.bingoRooms.push(room);room.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});log(db,req.session.user.name,'สร้างห้อง BINGO',title);writeDB(db);res.json({ok:true,roomId:room.id});});
@@ -217,9 +270,9 @@ app.delete('/api/bingo/:id',auth,adminOnly,(req,res)=>{const db=readDB();const i
 app.post('/api/bingo/:id/join',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||r.status==='closed')return res.status(404).json({error:'ไม่พบห้องนี้'});if(r.status!=='waiting')return res.status(400).json({error:'ห้องเริ่มเล่นแล้ว ไม่สามารถเข้าร่วมได้'});if(r.players.some(p=>String(p.userId)===String(req.session.user.id)))return res.json({ok:true});r.players.push({userId:req.session.user.id,name:req.session.user.name,card:makeBingoCard(),marked:Array.from({length:25},(_,i)=>i===12),joinedAt:isoNow()});r.lastActivityAt=isoNow();log(db,req.session.user.name,'เข้าร่วมห้อง BINGO',r.title);writeDB(db);res.json({ok:true});});
 app.post('/api/bingo/:id/leave',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});const idx=r.players.findIndex(p=>String(p.userId)===String(req.session.user.id));if(idx<0)return res.status(400).json({error:'คุณไม่ได้อยู่ในห้องนี้'});r.players.splice(idx,1);r.lastActivityAt=isoNow();if(!r.players.length)r.status='closed';else if(String(r.hostId)===String(req.session.user.id)){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}log(db,req.session.user.name,'ออกจากห้อง BINGO',r.title);writeDB(db);res.json({ok:true});});
 app.post('/api/bingo/:id/start',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะผู้สร้างห้องเท่านั้นที่เริ่มเกมได้'});if(r.status!=='waiting')return res.status(400).json({error:'ห้องนี้เริ่มหรือจบเกมไปแล้ว'});if(!r.players.length)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 1 คน'});r.status='playing';r.startedAt=isoNow();r.lastActivityAt=isoNow();r.nextDrawAt=Date.now()+7000;log(db,req.session.user.name,'เริ่มเกม BINGO',r.title);writeDB(db);res.json({ok:true});});
-app.post('/api/bingo/:id/tick',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});if(r.status!=='playing')return res.json({ok:true,drawn:false});const now=Date.now();if(now<(r.nextDrawAt||0))return res.json({ok:true,drawn:false,nextDrawAt:r.nextDrawAt});const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!r.drawn.includes(n));if(!remaining.length){r.status='finished';writeDB(db);return res.json({ok:true,drawn:false,finished:true});}const number=remaining[Math.floor(Math.random()*remaining.length)];r.drawn.push(number);const newWinners=[];r.lastActivityAt=isoNow();r.nextDrawAt=(r.nextDrawAt||now)+7000;while(r.nextDrawAt<=now)r.nextDrawAt+=7000;if(r.drawn.length>=75&&r.status==='playing')r.status='finished';writeDB(db);res.json({ok:true,drawn:true,number,winners:newWinners,nextDrawAt:r.nextDrawAt});});
+app.post('/api/bingo/:id/tick',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r)return res.status(404).json({error:'ไม่พบห้องนี้'});if(r.status!=='playing')return res.json({ok:true,drawn:false});const now=Date.now();if(now<(r.nextDrawAt||0))return res.json({ok:true,drawn:false,nextDrawAt:r.nextDrawAt});const remaining=Array.from({length:75},(_,i)=>i+1).filter(n=>!r.drawn.includes(n));if(!remaining.length){r.status='finished';r.finishedAt=r.finishedAt||isoNow();r.lastActivityAt=isoNow();writeDB(db);return res.json({ok:true,drawn:false,finished:true});}const number=remaining[Math.floor(Math.random()*remaining.length)];r.drawn.push(number);const newWinners=[];r.lastActivityAt=isoNow();r.nextDrawAt=(r.nextDrawAt||now)+7000;while(r.nextDrawAt<=now)r.nextDrawAt+=7000;if(r.drawn.length>=75&&r.status==='playing'){r.status='finished';r.finishedAt=isoNow();}writeDB(db);res.json({ok:true,drawn:true,number,winners:newWinners,nextDrawAt:r.nextDrawAt});});
 app.post('/api/bingo/:id/mark',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||!['playing','finished'].includes(r.status))return res.status(400).json({error:'เกมยังไม่เริ่มหรือไม่มีสิทธิ์ทำรายการ'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id)),index=Number(req.body?.index);if(!p)return res.status(403).json({error:'คุณไม่ได้อยู่ในห้องนี้'});if(!Number.isInteger(index)||index<0||index>24||index===12)return res.status(400).json({error:'ตำแหน่งไม่ถูกต้อง'});if(!r.drawn.includes(p.card[index]))return res.status(400).json({error:'เลขนี้ยังไม่ถูกสุ่ม'});if(r.status==='finished'&&!bingoCanStillWin(r,p))return res.status(400).json({error:'รอบนี้จบแล้ว'});p.marked=p.marked||Array(25).fill(false);p.marked[index]=true;r.lastActivityAt=isoNow();const winner=checkBingoWinnerForPlayer(r,p);if(winner)log(db,p.name,'ชนะเกม BINGO',`${r.title} · ${winner.line}`);writeDB(db);res.json({ok:true,winners:winner?[winner]:[],status:r.status,canStillWin:bingoCanStillWin(r,p)});});
-app.post('/api/bingo/:id/claim',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||!['playing','finished'].includes(r.status))return res.status(400).json({error:'เกมยังไม่เริ่มหรือจบแล้ว'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));if(!p)return res.status(403).json({error:'คุณไม่ได้อยู่ในห้องนี้'});const lines=[];for(let y=0;y<5;y++)lines.push(Array.from({length:5},(_,x)=>y*5+x));for(let x=0;x<5;x++)lines.push(Array.from({length:5},(_,y)=>y*5+x));lines.push([0,6,12,18,24],[4,8,12,16,20]);const win=lines.find(line=>line.every(i=>p.marked[i]));if(!win)return res.status(400).json({error:'ยังไม่ครบ 5 ช่องในแถว คอลัมน์ หรือแนวทแยง'});const line=win[1]===6||win[1]===8?'แนวทแยง':win[0]<5?'แนวนอน':win[0]%5===0?'แนวตั้ง':'BINGO';const winner=checkBingoWinnerForPlayer(r,p);if(!winner)return res.status(400).json({error:'คุณยังวงเลขไม่ครบ'});log(db,p.name,'ชนะเกม BINGO',`${r.title} · ${line}`);r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true,line,winners:[winner]});});
+app.post('/api/bingo/:id/claim',auth,(req,res)=>{const db=readDB(),r=roomFor(db,req.params.id);if(!r||!['playing','finished'].includes(r.status))return res.status(400).json({error:'เกมยังไม่เริ่มหรือจบแล้ว'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));if(!p)return res.status(403).json({error:'คุณไม่ได้อยู่ในห้องนี้'});const win=bingoLines().find(line=>line.every(i=>p.marked[i]));if(!win)return res.status(400).json({error:'ยังไม่ครบ 5 ช่องในแนวนอน/แนวตั้ง หรือ 4 ช่องติดกันในแนวทแยง'});const step=win[1]-win[0];const line=Math.abs(step)===4||Math.abs(step)===6?'แนวทแยง (4 ช่อง)':step===1?'แนวนอน (5 ช่อง)':'แนวตั้ง (5 ช่อง)';const winner=checkBingoWinnerForPlayer(r,p);if(!winner)return res.status(400).json({error:'คุณยังวงเลขไม่ครบ'});log(db,p.name,'ชนะเกม BINGO',`${r.title} · ${line}`);r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true,line,winners:[winner]});});
 
 
 // =====================================
@@ -870,6 +923,9 @@ async function initializeDatabase() {
 }
 
 initializeDatabase().then(() => {
+  const bingoScheduler=setInterval(runBingoScheduler,1000);
+  if(typeof bingoScheduler.unref==='function')bingoScheduler.unref();
+  runBingoScheduler().catch(()=>{});
   app.listen(PORT, '0.0.0.0', () => console.log(`GANG CONTROL เปิดแล้วที่พอร์ต ${PORT}`));
 }).catch(err => {
   console.error('เริ่มระบบไม่สำเร็จ:', err);
