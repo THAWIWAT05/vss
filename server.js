@@ -332,7 +332,7 @@ function wwPublic(room,req){
  return {
   id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:room.roleConfig||{seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false},
   hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,
-  me:me?{role:me.role,alive:me.alive,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult||null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
+  me:me?{role:me.role,alive:me.alive,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult?{isWolf:!!me.seerResult.isWolf,checkedAt:me.seerResult.checkedAt||null}:null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
   players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,nightSubmitted:!!p.nightAction,voted:!!p.voted})),
   aliveCount:alive.length,wolfCount:alive.filter(p=>p.role==='wolf').length,
   nightReady:room.phase==='night'?wwNightReady(room):false,
@@ -470,7 +470,7 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
  r.lastActivityAt=isoNow();
  if(wwNightReady(r))wwResolveNight(r);
- writeDB(db);res.json({ok:true,phase:r.phase});
+ writeDB(db);res.json({ok:true,phase:r.phase,...(p.role==='seer'&&type==='inspect'?{seerResult:{isWolf:!!p.seerResult?.isWolf}}:{})});
 });
 app.post('/api/werewolf/:id/open-vote',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
