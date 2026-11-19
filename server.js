@@ -377,7 +377,7 @@ function wwPublic(room,req){
  const wolfVoteRows=Object.entries(wolfVotes).sort((a,b)=>b[1]-a[1]);
  const witchAttackTarget=wolfVoteRows.length&&(!wolfVoteRows[1]||wolfVoteRows[0][1]>wolfVoteRows[1][1])?wolfVoteRows[0][0]:null;
  return {
-  id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:wwNormalizeRoleConfig(room.roleConfig),
+  id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:wwNormalizeRoleConfig(room.roleConfig),roleCounts:Object.fromEntries([...new Set(room.players.map(p=>p.role).filter(Boolean))].map(role=>[role,room.players.filter(p=>p.role===role).length])),
   hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,
   me:me?{role:me.role,alive:me.alive,mediumResult:me.mediumResult||null,mediumUsed:!!me.mediumUsed,detectiveResult:me.detectiveResult||null,priestSaveUsed:!!me.priestSaveUsed,assassinUsed:!!me.assassinUsed,kingSaved:!!me.kingSaved,deathEvent:me.deathEvent?{id:me.deathEvent.id,cause:me.deathEvent.cause,createdAt:me.deathEvent.createdAt}:null,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult?{isWolf:!!me.seerResult.isWolf,checkedAt:me.seerResult.checkedAt||null}:null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
   players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,isWolfMate:WW_WOLF_ROLES.includes(me?.role)&&WW_WOLF_ROLES.includes(p.role),nightSubmitted:!!p.nightAction,voted:!!p.voted})),
