@@ -444,14 +444,20 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
  if(!r||r.phase!=='night')return res.status(400).json({error:'ตอนนี้ไม่ใช่ช่วงกลางคืน'});
  const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));
  if(!p||!p.alive)return res.status(403).json({error:'คุณไม่มีสิทธิ์ดำเนินการ'});
- if(p.nightAction)return res.status(400).json({error:'คุณส่งคำสั่งคืนนี้แล้ว'});
  const type=String(req.body?.type||''),targetId=String(req.body?.targetId||'');
+ // Retry-safe: if the same inspection request is repeated, return its saved result without running it twice.
+ if(p.nightAction){
+  if(p.role==='seer'&&type==='inspect'&&p.nightAction.type==='inspect'&&String(p.nightAction.targetId)===targetId&&p.seerResult){
+   return res.json({ok:true,phase:r.phase,seerResult:{isWolf:!!p.seerResult.isWolf}});
+  }
+  return res.status(400).json({error:'คุณส่งคำสั่งคืนนี้แล้ว'});
+ }
  const target=r.players.find(x=>String(x.userId)===targetId&&x.alive);
  if(p.role==='wolf'){
   if(type!=='kill'||!target||target.role==='wolf')return res.status(400).json({error:'เลือกเป้าหมายที่ไม่ใช่หมาป่า'});
   p.nightAction={type:'kill',targetId};
  }else if(p.role==='seer'){
-  if(type!=='inspect'||!target||target.userId===p.userId)return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
+  if(type!=='inspect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
   p.seerResult={targetId:String(target.userId),targetName:target.name,targetRole:target.role,isWolf:target.role==='wolf',checkedAt:isoNow()};
   p.nightAction={type:'inspect',targetId};
  }else if(p.role==='witch'){
@@ -460,11 +466,11 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
    if(p.witchSaveUsed||!target||target.role==='wolf')return res.status(400).json({error:'ใช้ยาชุบชีวิตไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
    p.witchSaveUsed=true;p.nightAction={type:'save',targetId};
   }else if(type==='poison'){
-   if(p.witchPoisonUsed||!target||target.userId===p.userId)return res.status(400).json({error:'ใช้ยาพิษไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
+   if(p.witchPoisonUsed||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'ใช้ยาพิษไปแล้วหรือเป้าหมายไม่ถูกต้อง'});
    p.witchPoisonUsed=true;p.nightAction={type:'poison',targetId};
   }else p.nightAction={type:'skip'};
  }else if(p.role==='bodyguard'||p.role==='guardian'){
-  if(type!=='protect'||!target||target.userId===p.userId)return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
+  if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
   if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
   p.nightAction={type:'protect',targetId};
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
