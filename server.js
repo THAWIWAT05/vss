@@ -365,7 +365,7 @@ function wwPublic(room,req){
  return {
   id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:wwNormalizeRoleConfig(room.roleConfig),
   hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,
-  me:me?{role:me.role,alive:me.alive,deathEvent:me.deathEvent?{id:me.deathEvent.id,cause:me.deathEvent.cause,createdAt:me.deathEvent.createdAt}:null,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult?{targetId:me.seerResult.targetId||null,targetName:me.seerResult.targetName||null,isWolf:!!me.seerResult.isWolf,checkedAt:me.seerResult.checkedAt||null}:null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
+  me:me?{role:me.role,alive:me.alive,deathEvent:me.deathEvent?{id:me.deathEvent.id,cause:me.deathEvent.cause,createdAt:me.deathEvent.createdAt}:null,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult?{isWolf:!!me.seerResult.isWolf,checkedAt:me.seerResult.checkedAt||null}:null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
   players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,isWolfMate:me?.role==='wolf'&&p.role==='wolf',nightSubmitted:!!p.nightAction,voted:!!p.voted})),
   aliveCount:alive.length,wolfCount:alive.filter(p=>p.role==='wolf').length,
   nightReady:room.phase==='night'?wwNightReady(room):false,
@@ -492,7 +492,7 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
  // Retry-safe: if the same inspection request is repeated, return its saved result without running it twice.
  if(p.nightAction){
   if(p.role==='seer'&&type==='inspect'&&p.nightAction.type==='inspect'&&String(p.nightAction.targetId)===targetId&&p.seerResult){
-   return res.json({ok:true,phase:r.phase,seerResult:{targetId:p.seerResult.targetId,targetName:p.seerResult.targetName,isWolf:!!p.seerResult.isWolf}});
+   return res.json({ok:true,phase:r.phase,seerResult:{isWolf:!!p.seerResult.isWolf}});
   }
   return res.status(400).json({error:'คุณส่งคำสั่งคืนนี้แล้ว'});
  }
@@ -502,7 +502,7 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
   p.nightAction={type:'kill',targetId};
  }else if(p.role==='seer'){
   if(type!=='inspect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
-  p.seerResult={targetId:String(target.userId),targetName:target.name,targetRole:target.role,isWolf:target.role==='wolf',checkedAt:isoNow()};
+  p.seerResult={targetId:String(target.userId),isWolf:target.role==='wolf',checkedAt:isoNow()};
   p.nightAction={type:'inspect',targetId};
  }else if(p.role==='witch'){
   if(!['save','poison','skip'].includes(type))return res.status(400).json({error:'คำสั่งแม่มดไม่ถูกต้อง'});
@@ -520,7 +520,7 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
  r.lastActivityAt=isoNow();
  if(wwNightReady(r))wwResolveNight(r);
- writeDB(db);res.json({ok:true,phase:r.phase,...(p.role==='seer'&&type==='inspect'?{seerResult:{targetId:p.seerResult?.targetId||null,targetName:p.seerResult?.targetName||null,isWolf:!!p.seerResult?.isWolf}}:{})});
+ writeDB(db);res.json({ok:true,phase:r.phase,...(p.role==='seer'&&type==='inspect'?{seerResult:{isWolf:!!p.seerResult?.isWolf}}:{})});
 });
 app.post('/api/werewolf/:id/open-vote',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
