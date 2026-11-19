@@ -288,7 +288,7 @@ const IMPOSTOR_WORDS = {
 };
 const IMPOSTOR_CATEGORY_LABELS={food:'อาหาร',places:'สถานที่',objects:'สิ่งของ',animals:'สัตว์',jobs:'อาชีพ',games:'เกมและบันเทิง'};
 function impostorRoomFor(db,id){return (db.impostorRooms||[]).find(x=>String(x.id)===String(id));}
-function impostorPublic(room,req){if(!room)return null;const uid=String(req.session.user.id),me=room.players.find(x=>String(x.userId)===uid);return {id:room.id,code:room.code,title:room.title,phase:room.phase,categoryLabel:IMPOSTOR_CATEGORY_LABELS[room.category]||'สุ่มหมวด',hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,me:me?{role:me.role,word:me.role==='impostor'?null:room.word,submitted:!!me.clue,voted:!!me.voted,alive:me.alive}:null,players:room.players.map(x=>({userId:x.userId,name:x.name,submitted:!!x.clue,voted:!!x.voted,alive:x.alive})),clues:room.players.filter(x=>x.clue).map(x=>({userId:x.userId,name:x.name,text:x.clue})),winner:room.winner,resultText:room.resultText,wordReveal:room.phase==='finished'?room.word:null,impostorNames:room.phase==='finished'?room.players.filter(x=>x.role==='impostor').map(x=>x.name).join(', '):null,createdAt:room.createdAt};}
+function impostorPublic(room,req){if(!room)return null;const uid=String(req.session.user.id),me=room.players.find(x=>String(x.userId)===uid);return {id:room.id,code:room.code,title:room.title,phase:room.phase,categoryLabel:IMPOSTOR_CATEGORY_LABELS[room.category]||'สุ่มหมวด',hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,me:me?{role:me.role,word:me.role==='impostor'?null:room.word,submitted:!!me.clue,voted:!!me.voted,alive:me.alive}:null,players:room.players.map(x=>({userId:x.userId,name:x.name,submitted:!!x.clue,voted:!!x.voted,alive:x.alive})),clues:room.phase==='clue'?[]:room.players.filter(x=>x.clue&&x.alive!==false).map(x=>({userId:x.userId,name:x.name,text:x.clue})),winner:room.winner,resultText:room.resultText,wordReveal:room.phase==='finished'?room.word:null,impostorNames:room.phase==='finished'?room.players.filter(x=>x.role==='impostor').map(x=>x.name).join(', '):null,createdAt:room.createdAt};}
 function impostorFinish(room,winner,result){room.phase='finished';room.winner=winner;room.resultText=result;room.finishedAt=isoNow();}
 function impostorResolveVotes(room){
  const alive=room.players.filter(x=>x.alive);
@@ -300,6 +300,7 @@ function impostorResolveVotes(room){
  const caught=room.players.find(x=>String(x.userId)===leaders[0]);
  if(!caught){impostorFinish(room,'impostor','ไม่พบผู้เล่นที่ถูกโหวต · Impostor หนีรอด');return;}
  caught.alive=false;room.caughtId=caught.userId;
+ if(String(room.hostId)===String(caught.userId)){const nextHost=room.players.find(x=>x.alive);if(nextHost){room.hostId=nextHost.userId;room.hostName=nextHost.name;}}
  if(caught.role==='impostor')room.phase='guess';
  else impostorFinish(room,'impostor',`${caught.name} ไม่ใช่ Impostor · ฝ่าย Impostor ชนะ`);
 }
@@ -335,7 +336,7 @@ app.post('/api/impostor/:id/leave',auth,(req,res)=>{
  else if(wasHost){const next=r.players.find(x=>x.alive)||r.players[0];r.hostId=next.userId;r.hostName=next.name;}
  r.lastActivityAt=isoNow();log(db,req.session.user.name,'ออกจากห้อง IMPOSTOR',r.code||'');writeDB(db);res.json({ok:true});
 });
-app.post('/api/impostor/:id/start',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='lobby')return res.status(400).json({error:'ห้องนี้เริ่มไปแล้วหรือไม่มีอยู่'});if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่เริ่มได้'});if(r.players.length<3)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 3 คน'});if(r.players.length>12)return res.status(400).json({error:'ผู้เล่นเกินจำนวนที่กำหนด'});const pool=IMPOSTOR_WORDS[r.category];r.word=pool[Math.floor(Math.random()*pool.length)];const chosen=Math.floor(Math.random()*r.players.length);r.players.forEach((p,i)=>{p.role=i===chosen?'impostor':'crew';p.clue=null;p.voted=null;p.alive=true});r.phase='clue';r.startedAt=isoNow();r.lastActivityAt=isoNow();log(db,req.session.user.name,'เริ่มเกม IMPOSTOR',r.code);writeDB(db);res.json({ok:true});});
+app.post('/api/impostor/:id/start',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='lobby')return res.status(400).json({error:'ห้องนี้เริ่มไปแล้วหรือไม่มีอยู่'});if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่เริ่มได้'});r.players=r.players.filter(p=>!p.left);if(r.players.length<3)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 3 คน'});if(r.players.length>12)return res.status(400).json({error:'ผู้เล่นเกินจำนวนที่กำหนด'});const pool=IMPOSTOR_WORDS[r.category];r.word=pool[Math.floor(Math.random()*pool.length)];const chosen=Math.floor(Math.random()*r.players.length);r.players.forEach((p,i)=>{p.role=i===chosen?'impostor':'crew';p.clue=null;p.voted=null;p.alive=true});r.phase='clue';r.startedAt=isoNow();r.lastActivityAt=isoNow();log(db,req.session.user.name,'เริ่มเกม IMPOSTOR',r.code);writeDB(db);res.json({ok:true});});
 app.post('/api/impostor/:id/clue',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='clue')return res.status(400).json({error:'ไม่อยู่ในช่วงส่งคำใบ้'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));if(!p||!p.alive)return res.status(403).json({error:'ไม่มีสิทธิ์ในห้องนี้'});if(p.clue)return res.status(400).json({error:'คุณส่งคำใบ้ไปแล้ว'});const clue=String(req.body?.clue||'').trim().replace(/\s+/g,' ');if(clue.length<1||clue.length>45)return res.status(400).json({error:'คำใบ้ต้องมี 1–45 ตัวอักษร'});p.clue=clue;r.lastActivityAt=isoNow();if(r.players.every(x=>x.clue))r.phase='vote';writeDB(db);res.json({ok:true,phase:r.phase});});
 app.post('/api/impostor/:id/vote',auth,(req,res)=>{
  const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='vote')return res.status(400).json({error:'ยังไม่ถึงช่วงโหวต'});
@@ -345,7 +346,7 @@ app.post('/api/impostor/:id/vote',auth,(req,res)=>{
  p.voted=target.userId;r.lastActivityAt=isoNow();impostorResolveVotes(r);writeDB(db);res.json({ok:true,phase:r.phase});
 });
 app.post('/api/impostor/:id/guess',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='guess')return res.status(400).json({error:'ไม่มีช่วงทายคำลับ'});const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));if(!p||p.role!=='impostor')return res.status(403).json({error:'เฉพาะ Impostor เท่านั้นที่ทายได้'});const guess=String(req.body?.guess||'').trim().toLocaleLowerCase('th');if(!guess)return res.status(400).json({error:'กรุณากรอกคำทาย'});if(guess===String(r.word).trim().toLocaleLowerCase('th'))impostorFinish(r,'impostor',`${p.name} ทายคำลับถูกต้อง`);else impostorFinish(r,'crew',`${p.name} ทายผิด · ฝ่ายผู้เล่นชนะ`);log(db,p.name,'จบเกม IMPOSTOR',r.winner==='impostor'?'Impostor ชนะ':'ฝ่ายผู้เล่นชนะ');writeDB(db);res.json({ok:true});});
-app.post('/api/impostor/:id/rematch',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='finished'||String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องหลังจบเกมเท่านั้น'});r.phase='lobby';r.word=null;r.winner=null;r.resultText=null;r.finishedAt=null;r.players.forEach(p=>{p.role=null;p.clue=null;p.voted=null;p.alive=true});r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true});});
+app.post('/api/impostor/:id/rematch',auth,(req,res)=>{const db=readDB(),r=impostorRoomFor(db,req.params.id);if(!r||r.phase!=='finished'||String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องหลังจบเกมเท่านั้น'});r.players=r.players.filter(p=>!p.left);if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players.length){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}r.phase='lobby';r.word=null;r.winner=null;r.resultText=null;r.finishedAt=null;r.players.forEach(p=>{p.role=null;p.clue=null;p.voted=null;p.alive=true;p.left=false});r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true});});
 
 
 
@@ -368,9 +369,12 @@ function wwNormalizeRoleConfig(input={},fallback={}){
 function wwBuildRoleDeck(playerCount,config){
  const cfg=wwNormalizeRoleConfig(config),wolfCount=Math.max(1,Math.floor(playerCount/4));
  const special=WW_SPECIAL_ROLES.filter(role=>cfg[role]);
- const villagerCount=playerCount-wolfCount-special.length;
+ const alphaSelected=special.includes('alpha');
+ const nonWolfSpecialCount=special.filter(role=>role!=='alpha').length;
+ const regularWolfCount=Math.max(0,wolfCount-(alphaSelected?1:0));
+ const villagerCount=playerCount-wolfCount-nonWolfSpecialCount;
  if(villagerCount<1)return {error:'บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน'};
- return {roles:[...special,...Array(wolfCount).fill('wolf'),...Array(villagerCount).fill('villager')],wolfCount,specialCount:special.length,villagerCount,roleConfig:cfg};
+ return {roles:[...special,...Array(regularWolfCount).fill('wolf'),...Array(villagerCount).fill('villager')],wolfCount,specialCount:special.length,villagerCount,roleConfig:cfg};
 }
 function wwRoomFor(db,id){return (db.werewolfRooms||[]).find(x=>String(x.id)===String(id));}
 function wwAlive(room){return room.players.filter(p=>p.alive);}
@@ -558,7 +562,7 @@ app.post('/api/werewolf/:id/start',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
  if(!r||r.phase!=='lobby')return res.status(400).json({error:'ห้องนี้เริ่มไปแล้วหรือไม่มีอยู่'});
  if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่เริ่มได้'});
- const n=r.players.length;if(n<4)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 4 คน'});if(n>16)return res.status(400).json({error:'ผู้เล่นเกินจำนวนที่กำหนด'});
+ r.players=r.players.filter(p=>!p.left);if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players.length){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}const n=r.players.length;if(n<4)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 4 คน'});if(n>16)return res.status(400).json({error:'ผู้เล่นเกินจำนวนที่กำหนด'});
  // Start accepts the exact current checkbox selection from the client. This prevents stale saved settings
  // from assigning roles that the host has just unchecked.
  const submitted=req.body?.roleConfig&&typeof req.body.roleConfig==='object'?req.body.roleConfig:null;
@@ -668,7 +672,7 @@ app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
  if(!hunter||String(r.pendingHunterId)!==String(hunter.userId)||hunter.role!=='hunter'||hunter.hunterShotUsed)return res.status(403).json({error:'ไม่มีสิทธิ์ใช้กระสุนตอบโต้'});
  const target=r.players.find(p=>String(p.userId)===String(req.body?.targetId)&&p.alive);
  if(!target||String(target.userId)===String(hunter.userId))return res.status(400).json({error:'เลือกเป้าหมายไม่ถูกต้อง'});
- target.alive=false;target.deathReason='hunter';hunter.hunterShotUsed=true;r.pendingHunterId=null;
+ target.alive=false;target.deathReason='hunter';target.deathEvent={id:`${r.id}:${r.dayNumber||0}:${target.userId}:hunter:${Date.now()}`,cause:'hunter',createdAt:isoNow()};hunter.hunterShotUsed=true;r.pendingHunterId=null;
  wwEnsureHost(r);
  if(!wwCheckWin(r)){
   // A hunter killed at night returns the village to day even if lastVote from a prior day remains.
@@ -681,8 +685,8 @@ app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
 app.post('/api/werewolf/:id/rematch',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
  if(!r||r.phase!=='finished'||String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องหลังจบเกมเท่านั้น'});
- r.phase='lobby';r.dayNumber=0;r.winner=null;r.resultText=null;r.finishedAt=null;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;
- r.players.forEach(p=>{p.role=null;p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.deathEvent=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.priestSaveUsed=false;p.mediumUsed=false;p.mediumResult=null;p.detectiveResult=null;p.assassinUsed=false;p.kingSaved=false;p.deathReason=null;});
+ r.players=r.players.filter(p=>!p.left);if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players.length){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}r.phase='lobby';r.dayNumber=0;r.winner=null;r.resultText=null;r.finishedAt=null;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;
+ r.players.forEach(p=>{p.left=false;p.role=null;p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.deathEvent=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.priestSaveUsed=false;p.mediumUsed=false;p.mediumResult=null;p.detectiveResult=null;p.assassinUsed=false;p.kingSaved=false;p.deathReason=null;});
  r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true});
 });
 
