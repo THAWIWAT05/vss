@@ -452,7 +452,7 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
   p.nightAction={type:'kill',targetId};
  }else if(p.role==='seer'){
   if(type!=='inspect'||!target||target.userId===p.userId)return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
-  p.seerResult={targetName:target.name,isWolf:target.role==='wolf'};
+  p.seerResult={targetId:String(target.userId),targetName:target.name,targetRole:target.role,isWolf:target.role==='wolf',checkedAt:isoNow()};
   p.nightAction={type:'inspect',targetId};
  }else if(p.role==='witch'){
   if(!['save','poison','skip'].includes(type))return res.status(400).json({error:'คำสั่งแม่มดไม่ถูกต้อง'});
