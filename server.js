@@ -49,6 +49,28 @@ const seed = () => ({
   ],
   attendance: [], requests: [], deliveries: [], dailyTasks: [], contributions: [], withdrawals: [], logs: []
 });
+// บัญชีทดสอบสำหรับทดลองเกมเท่านั้น: เก็บใน users แต่ไม่สร้างแถวใน members
+const TEST_ACCOUNTS = Array.from({ length: 5 }, (_, i) => ({
+  username: `test${String(i + 1).padStart(2, '0')}`,
+  password: 'Test1234!',
+  name: `TEST ${String(i + 1).padStart(2, '0')}`
+}));
+function ensureTestAccounts(db) {
+  let changed = false;
+  let nextId = Math.max(0, ...db.users.map(u => Number(u.id) || 0), ...db.members.map(m => Number(m.id) || 0)) + 1;
+  for (const account of TEST_ACCOUNTS) {
+    // ไม่เขียนทับบัญชีที่มีชื่อผู้ใช้นี้อยู่แล้ว และไม่แตะรหัสผ่านของบัญชีเดิม
+    if (db.users.some(u => String(u.username).toLowerCase() === account.username.toLowerCase())) continue;
+    db.users.push({
+      id: nextId++, username: account.username,
+      passwordHash: bcrypt.hashSync(account.password, 10),
+      name: account.name, role: 'tester', memberId: null, active: true, isTestAccount: true
+    });
+    changed = true;
+  }
+  return changed;
+}
+
 function normalizeDB(db) {
   for (const k of ['users', 'members', 'items', 'attendance', 'requests', 'deliveries', 'dailyTasks', 'contributions', 'withdrawals', 'logs', 'bingoRooms', 'impostorRooms', 'werewolfRooms']) if (!Array.isArray(db[k])) db[k] = [];
   return db;
@@ -833,8 +855,17 @@ async function initializeDatabase() {
       try { initial = normalizeDB(JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))); console.log('นำเข้าข้อมูลเดิมจาก data/db.json แล้ว'); }
       catch (err) { console.error('อ่าน data/db.json ไม่สำเร็จ ใช้ข้อมูลเริ่มต้นแทน:', err.message); }
     }
+    ensureTestAccounts(initial);
     await pool.query('INSERT INTO app_state (id, data) VALUES (1, $1::jsonb)', [JSON.stringify(initial)]);
     console.log('สร้างฐานข้อมูลเริ่มต้นใน PostgreSQL แล้ว');
+  } else {
+    // เพิ่มบัญชี TEST ให้ฐานข้อมูลที่ใช้งานอยู่ โดยไม่แก้บัญชีเดิมหรือข้อมูลสมาชิก
+    const current = await pool.query('SELECT data FROM app_state WHERE id = 1');
+    const db = normalizeDB(current.rows[0].data);
+    if (ensureTestAccounts(db)) {
+      await pool.query('UPDATE app_state SET data = $1::jsonb, updated_at = NOW() WHERE id = 1', [JSON.stringify(db)]);
+      console.log('เพิ่มบัญชีทดสอบ 5 บัญชีแล้ว (ไม่นับเป็นสมาชิก)');
+    }
   }
 }
 
