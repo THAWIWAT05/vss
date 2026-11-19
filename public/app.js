@@ -141,12 +141,16 @@ function installWerewolfDeathEffects(){
  `;document.head.appendChild(st);
 }
 function showWerewolfDeathEffect(event,roomId){
- if(!event?.id||!['wolf','poison','vote'].includes(event.cause))return;
+ if(!event?.id||!['wolf','poison','vote','assassin','hunter','bodyguard'].includes(event.cause))return;
  const key=`gcWWDeathShown:${roomId}:${event.id}`;
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
  const copy={
   wolf:{kicker:'NIGHT HUNT · FATAL ATTACK',title:'คุณถูกหมาป่าล่า',desc:'นักล่าพุ่งเข้าประชิด ก่อนตะปบและกัดอย่างรวดเร็ว',sound:'wolfAttack',asset:'/assets/death-fx/wolf-attack.gif'},
-  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'}
+  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'},
+  vote:{kicker:'VILLAGE VERDICT · ELIMINATED',title:'คุณถูกโหวตประหาร',desc:'เสียงโหวตจากหมู่บ้านตัดสินชะตาของคุณ',sound:'voteResult',asset:'/assets/death-fx/poison.gif'},
+  assassin:{kicker:'ASSASSIN STRIKE · FATAL ATTACK',title:'คุณถูกนักฆ่าลอบสังหาร',desc:'คมอาวุธของนักฆ่าจู่โจมอย่างรวดเร็ว',sound:'hunter',asset:'/assets/death-fx/wolf-attack.gif'},
+  hunter:{kicker:'HUNTER SHOT · ELIMINATED',title:'คุณถูกนายพรานยิง',desc:'เสียงปืนดังขึ้นก่อนทุกอย่างจะเงียบลง',sound:'hunter',asset:'/assets/death-fx/wolf-attack.gif'},
+  bodyguard:{kicker:'BODYGUARD SACRIFICE · FATAL',title:'คุณสละชีวิตเพื่อปกป้อง',desc:'การปกป้องครั้งสุดท้ายแลกมาด้วยชีวิตของคุณ',sound:'protect',asset:'/assets/death-fx/poison.gif'}
  }[event.cause];
  if(!copy)return;
  document.getElementById('wwDeathFx')?.remove();
@@ -640,7 +644,7 @@ function impostor(){
  const clues=(r.clues||[]).map(x=>`<div class="im-clue"><b>${esc(x.name)}</b><span>${esc(x.text)}</span></div>`).join('');
  let stage='';
  if(phase==='lobby')stage=`<div class="im-panel"><div class="im-kicker">ROOM CODE</div><div class="im-room"><div class="im-code">${esc(r.code)}</div><button class="im-btn ghost" id="imCopy">คัดลอกรหัส</button></div><p class="im-muted">แชร์รหัสนี้ให้สมาชิกเข้าห้อง · ต้องมีอย่างน้อย 3 คน</p><div class="im-players">${playerList}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${r.isHost?'<button class="im-btn" id="imStart" '+(players.length<3?'disabled':'')+'>▶ เริ่มเกม</button>':''}</div></div>`;
- if(phase==='clue')stage=`${roleCard}<div class="im-panel"><div class="im-room"><div><h3>รอบคำใบ้</h3><div class="im-muted">ทุกคนส่งคำใบ้ 1 คำหรือวลีสั้น ๆ ห้ามพูดคำลับโดยตรง</div></div><span class="im-pill">${(r.clues||[]).length}/${players.length} ส่งแล้ว</span></div>${p?.submitted?'<div class="im-toast-note" style="margin-top:12px">ส่งคำใบ้แล้ว รอผู้เล่นคนอื่น…</div>':`<div class="im-field" style="margin-top:14px"><label>คำใบ้ของคุณ</label><input id="imClueText" maxlength="45" placeholder="พิมพ์คำใบ้สั้น ๆ..."></div><button class="im-btn" id="imSendClue" style="margin-top:10px">ส่งคำใบ้</button>`}<div class="im-clues" style="margin-top:15px">${clues||'<div class="im-muted">ยังไม่มีคำใบ้</div>'}</div></div>`;
+ if(phase==='clue')stage=`${roleCard}<div class="im-panel"><div class="im-room"><div><h3>รอบคำใบ้</h3><div class="im-muted">ทุกคนส่งคำใบ้ 1 คำหรือวลีสั้น ๆ ห้ามพูดคำลับโดยตรง</div></div><span class="im-pill">${players.filter(x=>x.submitted&&x.alive!==false).length}/${players.filter(x=>x.alive!==false).length} ส่งแล้ว</span></div>${p?.submitted?'<div class="im-toast-note" style="margin-top:12px">ส่งคำใบ้แล้ว รอผู้เล่นคนอื่น…</div>':`<div class="im-field" style="margin-top:14px"><label>คำใบ้ของคุณ</label><input id="imClueText" maxlength="45" placeholder="พิมพ์คำใบ้สั้น ๆ..."></div><button class="im-btn" id="imSendClue" style="margin-top:10px">ส่งคำใบ้</button>`}<div class="im-clues" style="margin-top:15px">${clues||'<div class="im-muted">ยังไม่มีคำใบ้</div>'}</div></div>`;
  if(phase==='vote')stage=`<div class="im-panel"><h3>🗳️ ลงคะแนนหาตัว Impostor</h3><p class="im-muted">อ่านคำใบ้ทั้งหมดแล้วเลือกผู้เล่นที่น่าสงสัยที่สุด · โหวตได้ครั้งเดียว</p><div class="im-clues">${clues}</div>${p?.voted?'<div class="im-toast-note" style="margin-top:12px">คุณลงคะแนนแล้ว รอผลโหวตจากทุกคน…</div>':`<div style="display:grid;gap:8px;margin-top:14px">${players.filter(x=>String(x.userId)!==String(r.meId)&&x.alive!==false).map(x=>`<button class="im-vote" data-im-vote="${esc(x.userId)}"><b>${esc(x.name)}</b><span>เลือกคนนี้ →</span></button>`).join('')}</div>`}</div>`;
  if(phase==='guess')stage=`<div class="im-panel"><div class="im-secret im-bad"><div class="im-kicker">IMPOSTOR CAUGHT</div><div class="word">จับตัวได้แล้ว!</div><p>แต่ยังมีโอกาสพลิกเกมด้วยการทายคำลับ</p></div>${p?.role==='impostor'?`<div class="im-field" style="margin-top:14px"><label>ทายคำลับ</label><input id="imGuessText" maxlength="60" placeholder="คำที่คิดว่าคนอื่นได้รับ..."></div><button class="im-btn red" id="imGuess" style="margin-top:10px">ส่งคำทายครั้งสุดท้าย</button>`:'<div class="im-toast-note" style="margin-top:12px">รอ Impostor ทายคำลับ…</div>'}</div>`;
  if(phase==='finished')stage=`<div class="im-result"><div style="font-size:42px">${r.winner==='crew'?'🏆':'🕵️'}</div><div class="im-kicker">MATCH RESULT</div><h2>${r.winner==='crew'?'CREW WIN':'IMPOSTOR WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><p class="im-muted">คำลับคือ <b style="color:#ffe2a6">${esc(r.wordReveal||'')}</b> · Impostor: ${esc(r.impostorNames||'')}</p>${r.isHost?'<button class="im-btn" id="imRematch">เริ่มเกมใหม่</button>':''}</div>`;
@@ -691,7 +695,7 @@ async function loadWerewolf(roomId, forceLobby=false){
    else if(now.phase==='hunter_shot')GCSound.play('hunter');
    else if(now.phase==='finished'){
     const role=now.me?.role;
-    const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?role==='wolf':now.winner==='village'?role!=='wolf'&&role!=='jester':false;
+    const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?['wolf','alpha'].includes(role):now.winner==='assassin'?role==='assassin':now.winner==='village'?(!['wolf','alpha','jester','assassin'].includes(role)):false;
     GCSound.play(now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose');
    }
   }
@@ -813,13 +817,13 @@ function wireWerewolf(){
  document.querySelectorAll('[data-ww-join]').forEach(b=>b.onclick=async()=>{try{await api(`/api/werewolf/${encodeURIComponent(b.dataset.wwJoin)}/join`,{method:'POST',body:'{}'});werewolfForceLobby=false;localStorage.setItem('gcWerewolfRoom',b.dataset.wwJoin);await loadWerewolf(b.dataset.wwJoin)}catch(e){toast(e.message)}});
  document.querySelectorAll('[data-ww-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('ยืนยันลบห้องนี้และนำผู้เล่นออกทั้งหมด?'))return;try{await api(`/api/werewolf/${encodeURIComponent(b.dataset.wwDelete)}`,{method:'DELETE'});await loadWerewolf('');toast('ลบห้องแล้ว')}catch(e){toast(e.message)}});
  $('#wwCopy')?.addEventListener('click',()=>navigator.clipboard?.writeText(werewolfState?.room?.code||'').then(()=>toast('คัดลอกรหัสแล้ว')).catch(()=>toast('คัดลอกไม่สำเร็จ')));
- const updateRolePreview=()=>{const n=werewolfState?.room?.players?.length||0,w=Math.max(1,Math.floor(n/4)),ids=['Seer','Witch','Bodyguard','Guardian','Hunter','Jester','Detective','Priest','Medium','Infected','King','Assassin','Alpha'],labels=['ผู้หยั่งรู้','แม่มด','บอดี้การ์ด','ผู้พิทักษ์','นายพราน','ตัวตลก','นักสืบ','นักบวช','คนทรง','ผู้ติดเชื้อ','กษัตริย์','นักฆ่า','หมาป่าอัลฟ่า'];const selected=ids.map((id,i)=>$('#wwRole'+id)?.checked?labels[i]:null).filter(Boolean);const villagers=n-w-selected.length;const el=$('#wwRolePreview');if(el)el.textContent=`${n} คน · หมาป่าพื้นฐาน ${w} ตัว · ${selected.length?selected.join(' / '):'ไม่มีบทบาทพิเศษ'} · ชาวบ้าน ${villagers} คน${villagers<1?' · เลือกบทบาทมากเกินไป':''}`;};
+ const updateRolePreview=()=>{const n=werewolfState?.room?.players?.length||0,w=Math.max(1,Math.floor(n/4)),ids=['Seer','Witch','Bodyguard','Guardian','Hunter','Jester','Detective','Priest','Medium','Infected','King','Assassin','Alpha'],labels=['ผู้หยั่งรู้','แม่มด','บอดี้การ์ด','ผู้พิทักษ์','นายพราน','ตัวตลก','นักสืบ','นักบวช','คนทรง','ผู้ติดเชื้อ','กษัตริย์','นักฆ่า','หมาป่าอัลฟ่า'];const selected=ids.map((id,i)=>$('#wwRole'+id)?.checked?labels[i]:null).filter(Boolean);const nonWolfSpecial=ids.filter((id)=>id!=='Alpha'&&$('#wwRole'+id)?.checked).length;const villagers=n-w-nonWolfSpecial;const el=$('#wwRolePreview');if(el)el.textContent=`${n} คน · หมาป่ารวม ${w} ตัว${selected.length?' · '+selected.join(' / '):' · ไม่มีบทบาทพิเศษ'} · ชาวบ้าน ${villagers} คน${villagers<1?' · เลือกบทบาทมากเกินไป':''}`;};
  ['wwRoleSeer','wwRoleWitch','wwRoleBodyguard','wwRoleGuardian','wwRoleHunter','wwRoleJester','wwRoleDetective','wwRolePriest','wwRoleMedium','wwRoleInfected','wwRoleKing','wwRoleAssassin','wwRoleAlpha'].forEach(id=>$('#'+id)?.addEventListener('change',updateRolePreview));
  updateRolePreview();
  $('#wwSaveRoles')?.addEventListener('click',async()=>{try{await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/configure`,{method:'POST',body:JSON.stringify({seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked,detective:!!$('#wwRoleDetective')?.checked,priest:!!$('#wwRolePriest')?.checked,medium:!!$('#wwRoleMedium')?.checked,infected:!!$('#wwRoleInfected')?.checked,king:!!$('#wwRoleKing')?.checked,assassin:!!$('#wwRoleAssassin')?.checked,alpha:!!$('#wwRoleAlpha')?.checked})});await loadWerewolf(werewolfState.room.id);toast('บันทึกชุดบทบาทแล้ว')}catch(e){toast(e.message)}});
  $('#wwStart')?.addEventListener('click',async()=>{try{
   const roleConfig={seer:!!$('#wwRoleSeer')?.checked,witch:!!$('#wwRoleWitch')?.checked,bodyguard:!!$('#wwRoleBodyguard')?.checked,guardian:!!$('#wwRoleGuardian')?.checked,hunter:!!$('#wwRoleHunter')?.checked,jester:!!$('#wwRoleJester')?.checked,detective:!!$('#wwRoleDetective')?.checked,priest:!!$('#wwRolePriest')?.checked,medium:!!$('#wwRoleMedium')?.checked,infected:!!$('#wwRoleInfected')?.checked,king:!!$('#wwRoleKing')?.checked,assassin:!!$('#wwRoleAssassin')?.checked,alpha:!!$('#wwRoleAlpha')?.checked};
-  const n=werewolfState?.room?.players?.length||0,w=Math.max(1,Math.floor(n/4)),special=Object.values(roleConfig).filter(Boolean).length,villagers=n-w-special;
+  const n=werewolfState?.room?.players?.length||0,w=Math.max(1,Math.floor(n/4)),special=Object.values(roleConfig).filter(Boolean).length,nonWolfSpecial=Object.entries(roleConfig).filter(([role,enabled])=>enabled&&role!=='alpha').length,villagers=n-w-nonWolfSpecial;
   if(villagers<1)return toast('บทบาทที่เลือกมากเกินไป ต้องเหลือชาวบ้านอย่างน้อย 1 คน');
   if(!confirm(`ยืนยันเริ่มเกมด้วยบทบาทที่เลือกไว้?\nหมาป่า ${w} ตัว\nบทบาทพิเศษ ${special} บท\nชาวบ้าน ${villagers} คน`))return;
   await api(`/api/werewolf/${encodeURIComponent(werewolfState.room.id)}/start`,{method:'POST',body:JSON.stringify({roleConfig})});
@@ -886,6 +890,8 @@ function updateBingoCountdown(){
  if(ring)ring.style.setProperty('--progress',`${((7-left)/7*360)}deg`);
 }
 async function loadBingo(roomId,forceLobby=false){
+ // Explicitly entering the lobby must discard any previously remembered room.
+ if(forceLobby){try{localStorage.removeItem('gcBingoRoom')}catch{}}
  // Restore the last joined room after refresh or switching away and back.
  let targetRoomId=roomId||'';
  if(!targetRoomId&&!forceLobby){try{targetRoomId=localStorage.getItem('gcBingoRoom')||''}catch{}}
