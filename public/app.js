@@ -9,7 +9,7 @@ const fmt = s => s ? new Date(s).toLocaleString('th-TH',{dateStyle:'medium',time
 const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* GANG CONTROL REAL AUDIO ENGINE — CC0 MP3 assets (no synthesized Web Audio tones) */
-const GCSound = (()=>{ฤ
+const GCSound = (()=>{
  const defaults={enabled:true,volume:0.72};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
