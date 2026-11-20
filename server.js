@@ -702,6 +702,46 @@ app.post('/api/werewolf/:id/rematch',auth,(req,res)=>{
 });
 
 // Admin records attendance for each member in one of the three daily sessions.
+
+// ADMIN LIVE SPECTATOR CENTER — read-only overview of every game room, including lobby rooms.
+app.get('/api/admin/game-rooms', auth, adminOnly, (req,res)=>{
+ const db=readDB();
+ // Defensive normalization keeps one malformed legacy room from breaking the whole dashboard.
+ const roomPlayers = r => Array.isArray(r?.players) ? r.players : [];
+ const bingo=(Array.isArray(db.bingoRooms)?db.bingoRooms:[]).filter(Boolean).map(r=>{
+  const players=roomPlayers(r), drawn=Array.isArray(r.drawn)?r.drawn:[];
+  return {id:String(r.id??''),game:'bingo',title:String(r.title||'BINGO ROOM'),status:String(r.status||'waiting'),
+   hostName:String(r.hostName||'-'),createdAt:r.createdAt||null,playerCount:players.length,
+   drawn:drawn.filter(n=>Number.isInteger(Number(n))&&Number(n)>=1&&Number(n)<=75).map(Number),nextDrawAt:r.nextDrawAt||null,
+   winners:Array.isArray(r.winners)?r.winners:(r.winner?[r.winner]:[]),
+   players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),marked:Array.isArray(p?.marked)?p.marked.filter(Boolean).length:0,
+    card:Array.isArray(p?.card)?p.card:[],markedCells:Array.isArray(p?.marked)?p.marked:[]}))};
+ });
+ const impostor=(Array.isArray(db.impostorRooms)?db.impostorRooms:[]).filter(Boolean).map(r=>{
+  const players=roomPlayers(r);
+  return {id:String(r.id??''),game:'impostor',title:String(r.title||'IMPOSTOR ROOM'),status:String(r.phase||'lobby'),
+   hostName:String(r.hostName||'-'),createdAt:r.createdAt||null,playerCount:players.length,code:String(r.code||''),
+   category:String(r.category||''),word:r.word||null,winner:r.winner||null,resultText:String(r.resultText||''),
+   players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),role:p?.role||'ยังไม่สุ่ม',alive:p?.alive!==false,clue:String(p?.clue||''),voted:!!p?.voted}))};
+ });
+ const werewolf=(Array.isArray(db.werewolfRooms)?db.werewolfRooms:[]).filter(Boolean).map(r=>{
+  const players=roomPlayers(r);
+  return {id:String(r.id??''),game:'werewolf',title:String(r.title||'หมู่บ้านรัตติกาล'),status:String(r.phase||'lobby'),
+   hostName:String(r.hostName||'-'),createdAt:r.createdAt||null,playerCount:players.length,code:String(r.code||''),
+   dayNumber:Number(r.dayNumber)||0,winner:r.winner||null,resultText:String(r.resultText||''),
+   players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),role:p?.role||'ยังไม่สุ่ม',alive:p?.alive!==false,left:!!p?.left,nightSubmitted:!!p?.nightAction,voted:!!p?.voted}))};
+ });
+ const rooms=[...bingo,...impostor,...werewolf].filter(r=>r.id).sort((a,b)=>{
+  const ta=Date.parse(a.createdAt)||0,tb=Date.parse(b.createdAt)||0;return tb-ta;
+ });
+ res.set('Cache-Control','no-store');
+ res.json({ok:true,serverNow:Date.now(),rooms,summary:{
+  total:rooms.length,waiting:rooms.filter(r=>['waiting','lobby'].includes(r.status)).length,
+  playing:rooms.filter(r=>['playing','clue','vote','guess','night','day','hunter_shot'].includes(r.status)).length,
+  finished:rooms.filter(r=>r.status==='finished').length
+ }});
+});
+
 app.post('/api/attendance', auth, adminOnly, (req, res) => {
   const { memberId, sessionId, status, note } = req.body || {};
   const db = readDB(); const m = db.members.find(x => x.id === Number(memberId) && x.active);
