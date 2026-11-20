@@ -175,31 +175,6 @@ function installReportsNav(){
  if(!werewolfBtn){werewolfBtn=document.createElement('button');werewolfBtn.className='nav-item';werewolfBtn.dataset.page='werewolf';werewolfBtn.innerHTML='<span>🐺</span><span>WEREWOLF</span>';werewolfBtn.addEventListener('click',()=>{page='werewolf';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===werewolfBtn));loadWerewolf().catch(e=>toast(e.message));render()});}
  const auditBtn=document.querySelector('.nav-item[data-page="audit"]');
  if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn);
- installSpectatorNav();
-}
-function installSpectatorNav(){
- const first=document.querySelector('.nav-item[data-page="dashboard"]');if(!first)return;
- const nav=first.parentElement;
- let lobbyBtn=document.querySelector('.nav-item[data-spectator="lobby"]');
- if(!lobbyBtn){
-  lobbyBtn=document.createElement('button');lobbyBtn.type='button';lobbyBtn.className='nav-item';lobbyBtn.dataset.spectator='lobby';
-  lobbyBtn.innerHTML='<span>👁️</span><span>ห้องรอผู้ชม</span>';
-  lobbyBtn.addEventListener('click',()=>{window.location.href='/spectator-lobby'});
- }
- let adminBtn=document.querySelector('.nav-item[data-spectator="admin"]');
- if(!adminBtn){
-  adminBtn=document.createElement('button');adminBtn.type='button';adminBtn.className='nav-item hidden';adminBtn.dataset.spectator='admin';
-  adminBtn.innerHTML='<span>🎛️</span><span>ศูนย์ควบคุมผู้ชม</span>';
-  adminBtn.addEventListener('click',()=>{if(!isAdmin())return toast('เมนูนี้สำหรับแอดมินเท่านั้น');window.location.href='/admin/spectators'});
- }
- nav.append(lobbyBtn,adminBtn);
- syncSpectatorNav();
-}
-function syncSpectatorNav(){
- const lobbyBtn=document.querySelector('.nav-item[data-spectator="lobby"]');
- const adminBtn=document.querySelector('.nav-item[data-spectator="admin"]');
- if(lobbyBtn)lobbyBtn.classList.remove('hidden');
- if(adminBtn)adminBtn.classList.toggle('hidden',!isAdmin());
 }
 function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
@@ -276,7 +251,7 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();syncSpectatorNav();await loadBingo().catch(e=>toast(e.message))}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
