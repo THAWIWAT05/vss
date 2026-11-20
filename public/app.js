@@ -13,11 +13,12 @@ const GCSound = (()=>{
  const defaults={enabled:true,volume:0.72};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
- let unlocked=false;
+ let unlocked=false, ambientAudio=null, ambientKind='';
  const assets={
   // Realistic creature sounds
   wolf:'https://sfxmint.com/dl/werewolf-howl-05.mp3',
   night:'https://sfxmint.com/dl/werewolf-howl-04.mp3',
+  rooster:'https://www.soundjay.com/nature/sounds/rooster-crowing-1.mp3',
   wolfAttack:'https://sfxmint.com/dl/wolf-growl-03.mp3',
   kill:'https://sfxmint.com/dl/wolf-growl-03.mp3',
   death:'https://sfxmint.com/dl/wolf-growl-03.mp3',
@@ -59,9 +60,15 @@ const GCSound = (()=>{
   const sequence=['wolf','wolfAttack','protect','seer','potion','poison','hunter','jester','bell','death','winWolf','winVillage','lose'];
   for(const kind of sequence){await play(kind);await new Promise(resolve=>setTimeout(resolve,180));}
  }
- function update(patch){settings={...settings,...patch};save();}
+ function stopAmbient(){if(ambientAudio){try{ambientAudio.pause();ambientAudio.currentTime=0}catch(_){}}ambientAudio=null;ambientKind='';}
+ function playAmbient(kind,level=.18){
+  const url=assets[kind];if(!settings.enabled||settings.volume<=0||!url)return false;
+  if(ambientAudio&&ambientKind===kind&&!ambientAudio.paused)return true;
+  stopAmbient();try{ambientAudio=new Audio(url);ambientAudio.loop=true;ambientAudio.preload='auto';ambientAudio.volume=Math.max(0,Math.min(.28,settings.volume*level));ambientKind=kind;ambientAudio.play().catch(()=>{});return true}catch(_){ambientAudio=null;ambientKind='';return false}
+ }
+ function update(patch){settings={...settings,...patch};save();if(ambientAudio)ambientAudio.volume=Math.max(0,Math.min(.28,settings.volume*.18));if(!settings.enabled)stopAmbient();}
  function get(){return {...settings,unlocked};}
- return {play,testAll,update,get,unlock};
+ return {play,testAll,playAmbient,stopAmbient,update,get,unlock};
 })();
 
 function installGCSoundUI(){
@@ -91,7 +98,7 @@ function installWerewolfStyles(){if($('#werewolfStyles'))return;const st=documen
 .ww-hero{position:relative;overflow:hidden;padding:28px 30px;background:linear-gradient(115deg,#121a29,#263148 58%,#392b3a);border-bottom:1px solid #4c5362;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .ww-hero:after{content:'☾';position:absolute;right:7%;top:-58px;font-size:190px;color:#ffffff0a;pointer-events:none}
 .ww-kicker{font-size:10px;letter-spacing:3px;color:#c6a879;font-weight:900}.ww-hero h2{font-size:clamp(34px,5vw,54px);letter-spacing:2px;margin:6px 0;color:#fff;font-weight:1000}.ww-hero p{color:#c3c6d0;margin:0}.ww-pill{padding:8px 12px;border:1px solid #796c63;background:#ffffff0d;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:1px;z-index:1}
-.ww-body{padding:20px;display:grid;gap:15px}.ww-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ww-panel{background:linear-gradient(145deg,#202b3c,#151d2a);border:1px solid #3a485a;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081244}.ww-panel h3{margin:0 0 7px;color:#fff}.ww-muted{font-size:12px;color:#aab4c3;line-height:1.65}.ww-btn{border:1px solid #c7a878;background:linear-gradient(110deg,#a77b4d,#76533e);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.ww-btn:disabled{opacity:.4;cursor:not-allowed}.ww-btn.ghost{background:#202d40;border-color:#526176}.ww-btn.red{background:linear-gradient(110deg,#a74750,#702c3a);border-color:#c46a72}.ww-field{display:grid;gap:6px}.ww-field label{font-size:11px;color:#c2b49e;font-weight:800}.ww-field input,.ww-field select{width:100%;border:1px solid #4a5a70;background:#101824;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.ww-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ww-code{font:900 24px ui-monospace,monospace;letter-spacing:5px;color:#f2d4a5}.ww-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.ww-player{padding:11px 12px;border:1px solid #3c4a5d;border-radius:10px;background:#111a27;font-size:13px}.ww-player small{display:block;color:#a2adbb;margin-top:3px}.ww-dead{opacity:.45;filter:grayscale(1)}.ww-secret{padding:22px;border:1px solid #b08a59;border-radius:14px;background:linear-gradient(130deg,#3a3024,#202838);text-align:center}.ww-secret.wolf{border-color:#a84e5b;background:linear-gradient(130deg,#3e202b,#202838)}.ww-secret .role{font-size:clamp(27px,4vw,40px);font-weight:1000;color:#f4d6a8}.ww-secret.wolf .role{color:#ffabb2}.ww-role-guide{margin-top:14px;padding:14px;border:1px solid #526176;border-radius:12px;background:#111b29;text-align:left;display:grid;gap:10px}.ww-role-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ww-role-guide-item{padding:10px;border:1px solid #34465b;border-radius:9px;background:#172335}.ww-role-guide-item b{display:block;color:#f2d4a5;font-size:11px;margin-bottom:4px}.ww-role-guide-item span{display:block;color:#c2ccd8;font-size:12px;line-height:1.6}.ww-role-guide-status{padding:8px 10px;border-radius:8px;background:#263b34;color:#b8efd0;font-size:11px;font-weight:800}.ww-role-guide-status.used{background:#422b32;color:#ffc2c9}@media(max-width:600px){.ww-role-guide-grid{grid-template-columns:1fr}}.ww-phase{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #4b5668;background:#111a27;border-radius:12px}.ww-phase strong{color:#f2d4a5}.ww-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-top:12px}.ww-action{padding:12px;border:1px solid #526176;background:#172335;color:#f7f2e9;border-radius:11px;text-align:left;cursor:pointer}.ww-action:hover{border-color:#d0ad7d;background:#293449}.ww-action b{display:block;margin-bottom:4px}.ww-action small{color:#aab4c3}.ww-result{text-align:center;padding:25px;border:1px solid #9e815d;border-radius:14px;background:linear-gradient(135deg,#302b29,#1b2635)}.ww-result h2{font-size:30px;margin:7px 0}.ww-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #3a485a;border-radius:12px;background:#111a27}.ww-rule{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:10px 0}.ww-rule span{width:27px;height:27px;border-radius:8px;background:#4a3d36;display:grid;place-items:center;font-weight:900;color:#f0d5ae}.ww-notice{padding:12px;border-radius:11px;background:#2d3442;border:1px solid #4b586a;color:#e6d6bd}.ww-role-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin:14px 0}.ww-role-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #526176;background:linear-gradient(145deg,#182638,#111a27);border-radius:12px;cursor:pointer}.ww-role-option input{accent-color:#c6a879;width:17px;height:17px}.ww-role-option b{display:block;color:#f5e8d2}.ww-role-option small{display:block;color:#aab4c3;font-size:10px;margin-top:3px}
+.ww-body{padding:20px;display:grid;gap:15px}.ww-day-scene{position:relative;overflow:hidden;background:radial-gradient(ellipse at 85% 0%,#ffe8a766 0%,transparent 42%),linear-gradient(135deg,#34475a,#202b3c 55%,#473c35)!important;border-color:#c6a879!important;box-shadow:0 0 34px #f7cf7a22,inset 0 1px #fff3}.ww-day-scene:before{content:'☀';position:absolute;right:7%;top:-28px;font-size:112px;color:#ffe7a944;text-shadow:0 0 45px #ffdf8b88;pointer-events:none;animation:wwSunGlow 4s ease-in-out infinite alternate}@keyframes wwSunGlow{to{transform:scale(1.08);filter:brightness(1.25)}}.ww-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ww-panel{background:linear-gradient(145deg,#202b3c,#151d2a);border:1px solid #3a485a;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081244}.ww-panel h3{margin:0 0 7px;color:#fff}.ww-muted{font-size:12px;color:#aab4c3;line-height:1.65}.ww-btn{border:1px solid #c7a878;background:linear-gradient(110deg,#a77b4d,#76533e);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.ww-btn:disabled{opacity:.4;cursor:not-allowed}.ww-btn.ghost{background:#202d40;border-color:#526176}.ww-btn.red{background:linear-gradient(110deg,#a74750,#702c3a);border-color:#c46a72}.ww-field{display:grid;gap:6px}.ww-field label{font-size:11px;color:#c2b49e;font-weight:800}.ww-field input,.ww-field select{width:100%;border:1px solid #4a5a70;background:#101824;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.ww-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ww-code{font:900 24px ui-monospace,monospace;letter-spacing:5px;color:#f2d4a5}.ww-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.ww-player{padding:11px 12px;border:1px solid #3c4a5d;border-radius:10px;background:#111a27;font-size:13px}.ww-player small{display:block;color:#a2adbb;margin-top:3px}.ww-dead{opacity:.45;filter:grayscale(1)}.ww-secret{padding:22px;border:1px solid #b08a59;border-radius:14px;background:linear-gradient(130deg,#3a3024,#202838);text-align:center}.ww-secret.wolf{border-color:#a84e5b;background:linear-gradient(130deg,#3e202b,#202838)}.ww-secret .role{font-size:clamp(27px,4vw,40px);font-weight:1000;color:#f4d6a8}.ww-secret.wolf .role{color:#ffabb2}.ww-role-guide{margin-top:14px;padding:14px;border:1px solid #526176;border-radius:12px;background:#111b29;text-align:left;display:grid;gap:10px}.ww-role-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ww-role-guide-item{padding:10px;border:1px solid #34465b;border-radius:9px;background:#172335}.ww-role-guide-item b{display:block;color:#f2d4a5;font-size:11px;margin-bottom:4px}.ww-role-guide-item span{display:block;color:#c2ccd8;font-size:12px;line-height:1.6}.ww-role-guide-status{padding:8px 10px;border-radius:8px;background:#263b34;color:#b8efd0;font-size:11px;font-weight:800}.ww-role-guide-status.used{background:#422b32;color:#ffc2c9}@media(max-width:600px){.ww-role-guide-grid{grid-template-columns:1fr}}.ww-phase{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #4b5668;background:#111a27;border-radius:12px}.ww-phase strong{color:#f2d4a5}.ww-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-top:12px}.ww-action{padding:12px;border:1px solid #526176;background:#172335;color:#f7f2e9;border-radius:11px;text-align:left;cursor:pointer}.ww-action:hover{border-color:#d0ad7d;background:#293449}.ww-action b{display:block;margin-bottom:4px}.ww-action small{color:#aab4c3}.ww-result{text-align:center;padding:25px;border:1px solid #9e815d;border-radius:14px;background:linear-gradient(135deg,#302b29,#1b2635)}.ww-result h2{font-size:30px;margin:7px 0}.ww-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #3a485a;border-radius:12px;background:#111a27}.ww-rule{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:10px 0}.ww-rule span{width:27px;height:27px;border-radius:8px;background:#4a3d36;display:grid;place-items:center;font-weight:900;color:#f0d5ae}.ww-notice{padding:12px;border-radius:11px;background:#2d3442;border:1px solid #4b586a;color:#e6d6bd}.ww-role-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin:14px 0}.ww-role-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #526176;background:linear-gradient(145deg,#182638,#111a27);border-radius:12px;cursor:pointer}.ww-role-option input{accent-color:#c6a879;width:17px;height:17px}.ww-role-option b{display:block;color:#f5e8d2}.ww-role-option small{display:block;color:#aab4c3;font-size:10px;margin-top:3px}
 @media(max-width:680px){.ww-grid{grid-template-columns:1fr}.ww-body{padding:11px}.ww-hero{padding:20px}.ww-panel{padding:13px}}
 
 .bingo-main>aside,.im-shell aside,.ww-body>aside,.game-right-sidebar,.right-game-sidebar{max-height:calc(100vh - 150px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#7a8798 #182333;padding-right:5px}
@@ -143,7 +150,7 @@ function installWerewolfDeathEffects(){
 function installWerewolfSkillEffects(){
  if(document.getElementById('wwSkillFxStyles'))return;
  const st=document.createElement('style');st.id='wwSkillFxStyles';st.textContent=`
- #wwSkillFx{--skill:#a78bfa;position:fixed;inset:0;z-index:29999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#111827a8 0%,#030712e8 72%);color:#fff;pointer-events:none;font-family:inherit;animation:wwSkillFade .35s ease-out both}
+ #wwSkillFx{--skill:#a78bfa;position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#111827a8 0%,#030712e8 72%);color:#fff;pointer-events:none;font-family:inherit;animation:wwSkillFade .35s ease-out both}
  #wwSkillFx.protect{--skill:#5eead4;background:radial-gradient(ellipse at center,#062b31bb 0%,#030712e8 72%)}
  #wwSkillFx *{box-sizing:border-box}
  #wwSkillFx [hidden]{display:none!important}
@@ -162,12 +169,14 @@ function installWerewolfSkillEffects(){
  @media(prefers-reduced-motion:reduce){#wwSkillFx *,#wwSkillFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
  `;document.head.appendChild(st);
 }
+let wwSkillEffectPromise=Promise.resolve();
 function showWerewolfSkillEffect(kind,targetName=''){
+
  const configs={
   seer:{className:'seer',icon:'🔮',asset:'/assets/death-fx/seer-inspect.gif',kicker:'ORACLE VISION · TRUTH REVEALED',title:'ญาณหยั่งรู้ถูกปลุกขึ้น',desc:'ม่านเวทมนตร์เปิดเผยความจริงของผู้เล่นที่คุณเลือก'},
   protect:{className:'protect',icon:'🛡️',asset:'/assets/death-fx/bodyguard-protect.gif',kicker:'GUARDIAN AEGIS · PROTECTION CAST',title:'กำแพงพิทักษ์ถูกกางออก',desc:'พลังป้องกันโอบล้อมเป้าหมาย ปกป้องจากอันตรายในค่ำคืนนี้'}
  };
- const cfg=configs[kind];if(!cfg)return;
+ const cfg=configs[kind];if(!cfg)return Promise.resolve();
  document.getElementById('wwSkillFx')?.remove();
  const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
  const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
@@ -175,7 +184,9 @@ function showWerewolfSkillEffect(kind,targetName=''){
  document.body.appendChild(el);
  const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
  img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
- const close=()=>el.remove();const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+ let finish;wwSkillEffectPromise=new Promise(resolve=>{finish=resolve});
+ const close=()=>{if(el.isConnected)el.remove();finish?.()};const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+ return wwSkillEffectPromise;
 }
 
 function showWerewolfDeathEffect(event,roomId){
@@ -723,11 +734,16 @@ async function loadWerewolf(roomId, forceLobby=false){
  const old=werewolfState?.room,now=next?.room;
  if(old&&now&&String(old.id)===String(now.id)){
   if(old.phase!==now.phase){
-   if(now.phase==='night'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
-   else if(now.phase==='day')GCSound.play('bell');
+   if(now.phase==='night'){
+    // Keep the spell scene on top and delay the night ambience until its animation has finished.
+    if(document.getElementById('wwSkillFx'))await wwSkillEffectPromise;
+    GCSound.stopAmbient();GCSound.play('night');setTimeout(()=>{if(werewolfState?.room?.phase==='night')GCSound.playAmbient('night',.16)},900);
+   }
+   else if(now.phase==='day'){GCSound.stopAmbient();GCSound.play('bell');setTimeout(()=>{if(werewolfState?.room?.phase==='day')GCSound.play('rooster').then(ok=>{if(!ok)GCSound.play('dawn')})},450);}
    else if(now.phase==='vote')GCSound.play('vote');
    else if(now.phase==='hunter_shot')GCSound.play('hunter');
    else if(now.phase==='finished'){
+    GCSound.stopAmbient();
     const role=now.me?.role;
     const won=now.winner==='jester'?role==='jester':now.winner==='wolf'?['wolf','alpha'].includes(role):now.winner==='assassin'?role==='assassin':now.winner==='village'?(!['wolf','alpha','jester','assassin'].includes(role)):false;
     GCSound.play(now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose');
@@ -753,6 +769,7 @@ async function loadWerewolf(roomId, forceLobby=false){
  }
  werewolfState=next;
  if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
+ if(!now||now.phase==='lobby')GCSound.stopAmbient();
  if(!next?.room&&roomId)localStorage.removeItem('gcWerewolfRoom');
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
 }
@@ -848,7 +865,7 @@ function werewolf(){
   else action='<div class="ww-notice">ชาวบ้านไม่มีคำสั่งในเวลากลางคืน รอให้รุ่งเช้า</div>';
   stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌙</span><div><strong>ถึงตาของคุณแล้ว</strong><div class="ww-muted">ใช้ความสามารถของบทบาทให้เสร็จ แล้วรอคิวถัดไป</div></div></div><div style="margin-top:14px"><h3>คำสั่งของคุณ</h3>${action}</div><div class="ww-muted" style="margin-top:12px">ผู้เล่นที่ส่งคำสั่ง: ${players.filter(x=>x.alive&&x.nightSubmitted).length}/${players.filter(x=>x.alive&&['wolf','alpha','seer','detective','witch','bodyguard','guardian','priest','medium','assassin'].includes(x.role)).length} บทบาท</div></div>`;
  }
- if(phase==='day')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌅</span><div><strong>รุ่งเช้า · วันที่ ${r.dayNumber}</strong><div class="ww-muted">ทุกคนตื่นขึ้นมาและอภิปรายว่าใครน่าสงสัย</div></div></div>${r.lastNight?.killed?.length?`<div class="ww-notice" style="margin-top:12px">เมื่อคืนมีผู้เสียชีวิต: <b>${r.lastNight.killed.map(esc).join(', ')}</b>${r.lastNight.saved?' · มีคนได้รับการช่วยชีวิต':''}</div>`:`<div class="ww-notice" style="margin-top:12px">เมื่อคืนไม่มีผู้เสียชีวิต</div>`}${r.lastVote?`<div class="ww-notice" style="margin-top:8px">${r.lastVote.name?`ผลโหวต: <b>${esc(r.lastVote.name)}</b> ถูกกำจัด · บทบาท ${esc(r.lastVote.role)}`:'ผลโหวตเสมอหรือไม่มีคะแนน · ไม่มีผู้ถูกกำจัด'}</div>`:''}${r.isHost?'<button class="ww-btn" id="wwOpenVote" style="margin-top:14px">🗳️ เปิดช่วงลงคะแนน</button>':'<div class="ww-muted" style="margin-top:14px">รอเจ้าของห้องเปิดช่วงลงคะแนน</div>'}</div>`;
+ if(phase==='day')stage=`<div class="ww-panel ww-day-scene"><div class="ww-phase"><span style="font-size:30px">🌅</span><div><strong>รุ่งเช้า · วันที่ ${r.dayNumber}</strong><div class="ww-muted">ทุกคนตื่นขึ้นมาและอภิปรายว่าใครน่าสงสัย</div></div></div>${r.lastNight?.killed?.length?`<div class="ww-notice" style="margin-top:12px">เมื่อคืนมีผู้เสียชีวิต: <b>${r.lastNight.killed.map(esc).join(', ')}</b>${r.lastNight.saved?' · มีคนได้รับการช่วยชีวิต':''}</div>`:`<div class="ww-notice" style="margin-top:12px">เมื่อคืนไม่มีผู้เสียชีวิต</div>`}${r.lastVote?`<div class="ww-notice" style="margin-top:8px">${r.lastVote.name?`ผลโหวต: <b>${esc(r.lastVote.name)}</b> ถูกกำจัด · บทบาท ${esc(r.lastVote.role)}`:'ผลโหวตเสมอหรือไม่มีคะแนน · ไม่มีผู้ถูกกำจัด'}</div>`:''}${r.isHost?'<button class="ww-btn" id="wwOpenVote" style="margin-top:14px">🗳️ เปิดช่วงลงคะแนน</button>':'<div class="ww-muted" style="margin-top:14px">รอเจ้าของห้องเปิดช่วงลงคะแนน</div>'}</div>`;
  if(phase==='vote')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">⚖️</span><div><strong>ลงคะแนนประหาร · วันที่ ${r.dayNumber}</strong><div class="ww-muted">เลือกผู้เล่นที่คิดว่าเป็นหมาป่า โหวตได้หนึ่งครั้ง</div></div></div>${!p?.alive?'<div class="ww-notice" style="margin-top:12px">คุณถูกกำจัดแล้ว ไม่สามารถลงคะแนนได้</div>':p?.voted?'<div class="ww-notice" style="margin-top:12px">คุณลงคะแนนแล้ว รอผู้เล่นคนอื่น…</div>':`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-vote="${esc(x.userId)}"><b>⚖️ ${esc(x.name)}</b><small>โหวตประหาร</small></button>`).join('')}<button class="ww-action" data-ww-vote="skip"><b>ข้ามการโหวต</b><small>งดออกเสียง</small></button></div>`}<div class="ww-muted" style="margin-top:12px">ลงคะแนนแล้ว ${r.voteCount}/${r.aliveCount} คน</div></div>`;
  if(phase==='hunter_shot')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🏹</span><div><strong>นายพรานลั่นไกครั้งสุดท้าย</strong><div class="ww-muted">${esc(r.pendingHunterName||'นายพราน')} เลือกผู้เล่นหนึ่งคนเพื่อยิงก่อนออกจากเกม</div></div></div>${String(r.meId)===String(r.pendingHunterId||'')?`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-hunter="${esc(x.userId)}"><b>🏹 ${esc(x.name)}</b><small>ยิงผู้เล่นคนนี้</small></button>`).join('')}</div>`:'<div class="ww-notice">รอนายพรานเลือกเป้าหมาย…</div>'}</div>`;
  if(phase==='finished')stage=`<div class="ww-result"><div style="font-size:46px">${r.winner==='jester'?'🤡':r.winner==='assassin'?'🗡️':r.winner==='village'?'🏆':'🐺'}</div><div class="ww-kicker">THE VILLAGE HAS FALLEN</div><h2>${r.winner==='jester'?'JESTER WINS':r.winner==='assassin'?'ASSASSIN WINS':r.winner==='village'?'VILLAGE WINS':'WEREWOLVES WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><div class="ww-players" style="text-align:left;margin:16px 0">${(r.roleReveal||[]).map(x=>`<div class="ww-player"><b>${esc(x.name)}</b><small>${esc(x.role)} · ${x.alive?'รอดชีวิต':'ถูกกำจัด'}</small></div>`).join('')}</div>${r.isHost?'<button class="ww-btn" id="wwRematch">เริ่มเกมใหม่</button>':''}</div>`;
