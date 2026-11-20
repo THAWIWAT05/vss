@@ -146,11 +146,7 @@ function showWerewolfDeathEffect(event,roomId){
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
  const copy={
   wolf:{kicker:'NIGHT HUNT · FATAL ATTACK',title:'คุณถูกหมาป่าล่า',desc:'นักล่าพุ่งเข้าประชิด ก่อนตะปบและกัดอย่างรวดเร็ว',sound:'wolfAttack',asset:'/assets/death-fx/wolf-attack.gif'},
-  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'},
-  vote:{kicker:'VILLAGE VERDICT · ELIMINATED',title:'คุณถูกโหวตประหาร',desc:'เสียงโหวตจากหมู่บ้านตัดสินชะตาของคุณ',sound:'voteResult',asset:'/assets/death-fx/poison.gif'},
-  assassin:{kicker:'ASSASSIN STRIKE · FATAL ATTACK',title:'คุณถูกนักฆ่าลอบสังหาร',desc:'คมอาวุธของนักฆ่าจู่โจมอย่างรวดเร็ว',sound:'hunter',asset:'/assets/death-fx/wolf-attack.gif'},
-  hunter:{kicker:'HUNTER SHOT · ELIMINATED',title:'คุณถูกนายพรานยิง',desc:'เสียงปืนดังขึ้นก่อนทุกอย่างจะเงียบลง',sound:'hunter',asset:'/assets/death-fx/wolf-attack.gif'},
-  bodyguard:{kicker:'BODYGUARD SACRIFICE · FATAL',title:'คุณสละชีวิตเพื่อปกป้อง',desc:'การปกป้องครั้งสุดท้ายแลกมาด้วยชีวิตของคุณ',sound:'protect',asset:'/assets/death-fx/poison.gif'}
+  poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'}
  }[event.cause];
  if(!copy)return;
  document.getElementById('wwDeathFx')?.remove();
