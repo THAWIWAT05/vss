@@ -140,6 +140,44 @@ function installWerewolfDeathEffects(){
  @media(prefers-reduced-motion:reduce){#wwDeathFx *,#wwDeathFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
  `;document.head.appendChild(st);
 }
+function installWerewolfSkillEffects(){
+ if(document.getElementById('wwSkillFxStyles'))return;
+ const st=document.createElement('style');st.id='wwSkillFxStyles';st.textContent=`
+ #wwSkillFx{--skill:#a78bfa;position:fixed;inset:0;z-index:29999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#111827a8 0%,#030712e8 72%);color:#fff;pointer-events:none;font-family:inherit;animation:wwSkillFade .35s ease-out both}
+ #wwSkillFx.protect{--skill:#5eead4;background:radial-gradient(ellipse at center,#062b31bb 0%,#030712e8 72%)}
+ #wwSkillFx *{box-sizing:border-box}
+ #wwSkillFx [hidden]{display:none!important}
+ #wwSkillFx .wwskill-card{width:min(92vw,760px);text-align:center;position:relative;z-index:1;padding:22px 18px}
+ #wwSkillFx .wwskill-visual{height:min(54vh,460px);display:grid;place-items:center;position:relative}
+ #wwSkillFx .wwskill-visual img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 30px color-mix(in srgb,var(--skill) 65%,transparent));animation:wwSkillMotion 2.8s ease-in-out both}
+ #wwSkillFx .wwskill-fallback{font-size:clamp(100px,22vw,210px);line-height:1;filter:drop-shadow(0 0 35px var(--skill));animation:wwSkillMotion 2.8s ease-in-out both}
+ #wwSkillFx .wwskill-kicker{font-size:11px;letter-spacing:4px;font-weight:1000;color:var(--skill);margin:5px 0 10px}
+ #wwSkillFx h2{font-size:clamp(27px,5vw,48px);line-height:1.1;margin:0 0 9px;text-shadow:0 4px 18px #000}
+ #wwSkillFx p{color:#dbe4ee;margin:0;font-size:14px}
+ #wwSkillFx .wwskill-ring{position:absolute;width:min(65vw,380px);aspect-ratio:1;border:2px solid color-mix(in srgb,var(--skill) 75%,transparent);border-radius:50%;box-shadow:0 0 45px color-mix(in srgb,var(--skill) 45%,transparent),inset 0 0 45px color-mix(in srgb,var(--skill) 20%,transparent);animation:wwSkillRing 2.8s ease-out both}
+ #wwSkillFx .wwskill-close{position:absolute;right:18px;top:18px;pointer-events:auto;border:1px solid #ffffff55;border-radius:99px;background:#080b10bb;color:#fff;padding:9px 14px;cursor:pointer;font-weight:800}
+ @keyframes wwSkillFade{from{opacity:0}to{opacity:1}}
+ @keyframes wwSkillMotion{0%{opacity:0;transform:translateY(55px) scale(.45) rotate(-8deg)}35%{opacity:1;transform:translateY(-8px) scale(1.08) rotate(3deg)}55%{transform:translateY(0) scale(.98) rotate(-2deg)}100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+ @keyframes wwSkillRing{0%{opacity:0;transform:scale(.25)}45%{opacity:.9;transform:scale(1.05)}100%{opacity:.25;transform:scale(1.35)}}
+ @media(prefers-reduced-motion:reduce){#wwSkillFx *,#wwSkillFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+ `;document.head.appendChild(st);
+}
+function showWerewolfSkillEffect(kind,targetName=''){
+ const configs={
+  seer:{className:'seer',icon:'🔮',asset:'/assets/death-fx/seer-inspect.gif',kicker:'ORACLE VISION · TRUTH REVEALED',title:'ญาณหยั่งรู้ถูกปลุกขึ้น',desc:'ม่านเวทมนตร์เปิดเผยความจริงของผู้เล่นที่คุณเลือก'},
+  protect:{className:'protect',icon:'🛡️',asset:'/assets/death-fx/bodyguard-protect.gif',kicker:'GUARDIAN AEGIS · PROTECTION CAST',title:'กำแพงพิทักษ์ถูกกางออก',desc:'พลังป้องกันโอบล้อมเป้าหมาย ปกป้องจากอันตรายในค่ำคืนนี้'}
+ };
+ const cfg=configs[kind];if(!cfg)return;
+ document.getElementById('wwSkillFx')?.remove();
+ const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
+ const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
+ el.innerHTML=`<button class="wwskill-close" type="button">ข้ามฉาก ×</button><div class="wwskill-card"><div class="wwskill-visual"><div class="wwskill-ring"></div><img src="${cfg.asset}" alt="" draggable="false"><span class="wwskill-fallback" hidden>${cfg.icon}</span></div><div class="wwskill-kicker">${cfg.kicker}</div><h2>${cfg.title}</h2><p>${cfg.desc}</p>${target}</div>`;
+ document.body.appendChild(el);
+ const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
+ img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
+ const close=()=>el.remove();const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+}
+
 function showWerewolfDeathEffect(event,roomId){
  if(!event?.id||!['wolf','poison','vote','assassin','hunter','bodyguard'].includes(event.cause))return;
  const key=`gcWWDeathShown:${roomId}:${event.id}`;
@@ -247,7 +285,7 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();installWerewolfSkillEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
@@ -840,6 +878,10 @@ function wireWerewolf(){
    actionAccepted=true;
    const sound=['wolf','alpha'].includes(role)?'wolfAttack':['seer','detective'].includes(role)?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';
    GCSound.play(sound);
+   // Skill animation is local to the acting player and only plays after the API accepts the action.
+   const chosenPlayer=werewolfState?.room?.players?.find(x=>String(x.userId)===String(targetId));
+   if(role==='seer'&&type==='inspect')showWerewolfSkillEffect('seer',chosenPlayer?.name||'');
+   if(['bodyguard','guardian'].includes(role)&&type==='protect')showWerewolfSkillEffect('protect',chosenPlayer?.name||'');
    if(werewolfState?.room?.me){werewolfState.room.me.nightSubmitted=true;}
    if(role==='seer'&&type==='inspect'&&response.seerResult&&werewolfState?.room?.me){
     werewolfState.room.me.seerResult={isWolf:!!response.seerResult.isWolf,checkedAt:new Date().toISOString()};
@@ -1079,3 +1121,4 @@ setInterval(async()=>{
  }
 },200);
 boot().catch(()=>{});
+
