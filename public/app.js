@@ -13,12 +13,15 @@ const GCSound = (()=>{
  const defaults={enabled:true,volume:0.72};
  let settings={...defaults};
  try{settings={...defaults,...JSON.parse(localStorage.getItem('gcSoundSettings')||'{}')}}catch{}
- let unlocked=false, ambientAudio=null, ambientKind='';
+ let unlocked=false, ambientAudio=null, ambientKind='', ambientTimer=null, ambientGeneration=0;
  const assets={
   // Realistic creature sounds
   wolf:'https://sfxmint.com/dl/werewolf-howl-05.mp3',
   night:'https://sfxmint.com/dl/werewolf-howl-04.mp3',
   rooster:'https://www.soundjay.com/nature/sounds/rooster-crowing-1.mp3',
+  nightBird:'https://www.soundjay.com/nature/sounds/nightingale-1.mp3',
+  crickets:'https://www.soundjay.com/nature/sounds/crickets-1.mp3',
+  morningBirds:'https://www.soundjay.com/nature/sounds/birds-chirping-1.mp3',
   wolfAttack:'https://sfxmint.com/dl/wolf-growl-03.mp3',
   kill:'https://sfxmint.com/dl/wolf-growl-03.mp3',
   death:'https://sfxmint.com/dl/wolf-growl-03.mp3',
@@ -48,10 +51,10 @@ const GCSound = (()=>{
  };
  const save=()=>{try{localStorage.setItem('gcSoundSettings',JSON.stringify(settings))}catch{}};
  function unlock(){unlocked=true;return Promise.resolve(true)}
- function play(kind='tap'){
+ function play(kind='tap',level=1){
   if(!settings.enabled||settings.volume<=0)return Promise.resolve(false);
   const url=assets[kind]||null;if(!url)return Promise.resolve(false);
-  const audio=new Audio(url);audio.preload='auto';audio.volume=Math.max(0,Math.min(1,settings.volume));
+  const audio=new Audio(url);audio.preload='auto';audio.volume=Math.max(0,Math.min(1,settings.volume*level));
   // Each event gets its own Audio instance so overlapping game events do not cut one another off.
   return audio.play().then(()=>new Promise(resolve=>{audio.addEventListener('ended',()=>resolve(true),{once:true});audio.addEventListener('error',()=>resolve(false),{once:true});setTimeout(()=>resolve(true),12000)})).catch(()=>false);
  }
@@ -60,13 +63,28 @@ const GCSound = (()=>{
   const sequence=['wolf','wolfAttack','protect','seer','potion','poison','hunter','jester','bell','death','winWolf','winVillage','lose'];
   for(const kind of sequence){await play(kind);await new Promise(resolve=>setTimeout(resolve,180));}
  }
- function stopAmbient(){if(ambientAudio){try{ambientAudio.pause();ambientAudio.currentTime=0}catch(_){}}ambientAudio=null;ambientKind='';}
- function playAmbient(kind,level=.18){
-  const url=assets[kind];if(!settings.enabled||settings.volume<=0||!url)return false;
-  if(ambientAudio&&ambientKind===kind&&!ambientAudio.paused)return true;
-  stopAmbient();try{ambientAudio=new Audio(url);ambientAudio.loop=true;ambientAudio.preload='auto';ambientAudio.volume=Math.max(0,Math.min(.28,settings.volume*level));ambientKind=kind;ambientAudio.play().catch(()=>{});return true}catch(_){ambientAudio=null;ambientKind='';return false}
+ function stopAmbient(){
+  ambientGeneration++;if(ambientTimer){clearTimeout(ambientTimer);ambientTimer=null;}
+  if(ambientAudio){try{ambientAudio.pause();ambientAudio.currentTime=0}catch(_){}}
+  ambientAudio=null;ambientKind='';
  }
- function update(patch){settings={...settings,...patch};save();if(ambientAudio)ambientAudio.volume=Math.max(0,Math.min(.28,settings.volume*.18));if(!settings.enabled)stopAmbient();}
+ // Ambient is intentionally sparse: short, quiet one-shots with long gaps (never a looping howl).
+ function playAmbient(kind,level=.12){
+  if(!settings.enabled||settings.volume<=0)return false;
+  stopAmbient();const generation=ambientGeneration;ambientKind=kind;
+  const nightSounds=[['crickets',.16,9000,15000],['nightBird',.12,15000,24000],['wolf',.075,32000,48000]];
+  const daySounds=[['morningBirds',.14,11000,19000],['rooster',.10,26000,38000]];
+  const schedule=()=>{
+   if(generation!==ambientGeneration||!settings.enabled||settings.volume<=0)return;
+   const pool=kind==='night'?nightSounds:daySounds;
+   const [sound,volume,min,max]=pool[Math.floor(Math.random()*pool.length)];
+   play(sound,Math.min(level,volume));
+   ambientTimer=setTimeout(schedule,min+Math.random()*(max-min));
+  };
+  ambientTimer=setTimeout(schedule,kind==='night'?6500:3500);
+  return true;
+ }
+ function update(patch){settings={...settings,...patch};save();if(!settings.enabled)stopAmbient();}
  function get(){return {...settings,unlocked};}
  return {play,testAll,playAmbient,stopAmbient,update,get,unlock};
 })();
@@ -98,7 +116,7 @@ function installWerewolfStyles(){if($('#werewolfStyles'))return;const st=documen
 .ww-hero{position:relative;overflow:hidden;padding:28px 30px;background:linear-gradient(115deg,#121a29,#263148 58%,#392b3a);border-bottom:1px solid #4c5362;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .ww-hero:after{content:'☾';position:absolute;right:7%;top:-58px;font-size:190px;color:#ffffff0a;pointer-events:none}
 .ww-kicker{font-size:10px;letter-spacing:3px;color:#c6a879;font-weight:900}.ww-hero h2{font-size:clamp(34px,5vw,54px);letter-spacing:2px;margin:6px 0;color:#fff;font-weight:1000}.ww-hero p{color:#c3c6d0;margin:0}.ww-pill{padding:8px 12px;border:1px solid #796c63;background:#ffffff0d;border-radius:999px;font-size:11px;font-weight:900;letter-spacing:1px;z-index:1}
-.ww-body{padding:20px;display:grid;gap:15px}.ww-day-scene{position:relative;overflow:hidden;background:radial-gradient(ellipse at 85% 0%,#ffe8a766 0%,transparent 42%),linear-gradient(135deg,#34475a,#202b3c 55%,#473c35)!important;border-color:#c6a879!important;box-shadow:0 0 34px #f7cf7a22,inset 0 1px #fff3}.ww-day-scene:before{content:'☀';position:absolute;right:7%;top:-28px;font-size:112px;color:#ffe7a944;text-shadow:0 0 45px #ffdf8b88;pointer-events:none;animation:wwSunGlow 4s ease-in-out infinite alternate}@keyframes wwSunGlow{to{transform:scale(1.08);filter:brightness(1.25)}}.ww-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ww-panel{background:linear-gradient(145deg,#202b3c,#151d2a);border:1px solid #3a485a;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081244}.ww-panel h3{margin:0 0 7px;color:#fff}.ww-muted{font-size:12px;color:#aab4c3;line-height:1.65}.ww-btn{border:1px solid #c7a878;background:linear-gradient(110deg,#a77b4d,#76533e);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.ww-btn:disabled{opacity:.4;cursor:not-allowed}.ww-btn.ghost{background:#202d40;border-color:#526176}.ww-btn.red{background:linear-gradient(110deg,#a74750,#702c3a);border-color:#c46a72}.ww-field{display:grid;gap:6px}.ww-field label{font-size:11px;color:#c2b49e;font-weight:800}.ww-field input,.ww-field select{width:100%;border:1px solid #4a5a70;background:#101824;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.ww-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ww-code{font:900 24px ui-monospace,monospace;letter-spacing:5px;color:#f2d4a5}.ww-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.ww-player{padding:11px 12px;border:1px solid #3c4a5d;border-radius:10px;background:#111a27;font-size:13px}.ww-player small{display:block;color:#a2adbb;margin-top:3px}.ww-dead{opacity:.45;filter:grayscale(1)}.ww-secret{padding:22px;border:1px solid #b08a59;border-radius:14px;background:linear-gradient(130deg,#3a3024,#202838);text-align:center}.ww-secret.wolf{border-color:#a84e5b;background:linear-gradient(130deg,#3e202b,#202838)}.ww-secret .role{font-size:clamp(27px,4vw,40px);font-weight:1000;color:#f4d6a8}.ww-secret.wolf .role{color:#ffabb2}.ww-role-guide{margin-top:14px;padding:14px;border:1px solid #526176;border-radius:12px;background:#111b29;text-align:left;display:grid;gap:10px}.ww-role-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ww-role-guide-item{padding:10px;border:1px solid #34465b;border-radius:9px;background:#172335}.ww-role-guide-item b{display:block;color:#f2d4a5;font-size:11px;margin-bottom:4px}.ww-role-guide-item span{display:block;color:#c2ccd8;font-size:12px;line-height:1.6}.ww-role-guide-status{padding:8px 10px;border-radius:8px;background:#263b34;color:#b8efd0;font-size:11px;font-weight:800}.ww-role-guide-status.used{background:#422b32;color:#ffc2c9}@media(max-width:600px){.ww-role-guide-grid{grid-template-columns:1fr}}.ww-phase{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #4b5668;background:#111a27;border-radius:12px}.ww-phase strong{color:#f2d4a5}.ww-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-top:12px}.ww-action{padding:12px;border:1px solid #526176;background:#172335;color:#f7f2e9;border-radius:11px;text-align:left;cursor:pointer}.ww-action:hover{border-color:#d0ad7d;background:#293449}.ww-action b{display:block;margin-bottom:4px}.ww-action small{color:#aab4c3}.ww-result{text-align:center;padding:25px;border:1px solid #9e815d;border-radius:14px;background:linear-gradient(135deg,#302b29,#1b2635)}.ww-result h2{font-size:30px;margin:7px 0}.ww-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #3a485a;border-radius:12px;background:#111a27}.ww-rule{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:10px 0}.ww-rule span{width:27px;height:27px;border-radius:8px;background:#4a3d36;display:grid;place-items:center;font-weight:900;color:#f0d5ae}.ww-notice{padding:12px;border-radius:11px;background:#2d3442;border:1px solid #4b586a;color:#e6d6bd}.ww-role-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin:14px 0}.ww-role-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #526176;background:linear-gradient(145deg,#182638,#111a27);border-radius:12px;cursor:pointer}.ww-role-option input{accent-color:#c6a879;width:17px;height:17px}.ww-role-option b{display:block;color:#f5e8d2}.ww-role-option small{display:block;color:#aab4c3;font-size:10px;margin-top:3px}
+.ww-body{padding:20px;display:grid;gap:15px}.ww-day-scene{position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(circle at 88% 8%,#fff8c9 0%,#ffe58b 9%,#ffcf70 17%,transparent 39%),linear-gradient(115deg,#f6d99a 0%,#c6d9d2 34%,#718e9a 72%,#4c6372 100%)!important;border-color:#f7d88e!important;box-shadow:0 0 55px #ffd66b66,inset 0 1px #fff9;color:#182536!important}.ww-day-scene:before{content:'';position:absolute;z-index:-1;right:2%;top:-95px;width:245px;height:245px;border-radius:50%;background:radial-gradient(circle,#fffde4 0%,#ffeaa0 32%,#ffd66a 52%,#ffcc5a33 70%,transparent 74%);filter:blur(1px);box-shadow:0 0 65px 28px #ffe28b88;animation:wwSunGlow 5s ease-in-out infinite alternate}.ww-day-scene:after{content:'';position:absolute;z-index:-1;inset:0;background:linear-gradient(180deg,#fff4ce44,transparent 55%,#1c344022);pointer-events:none}.ww-day-scene .ww-phase{background:#fff9e8b8;border-color:#fff4d5;color:#24364a;box-shadow:0 5px 24px #fff2}.ww-day-scene .ww-phase strong,.ww-day-scene .ww-muted{color:#273c4e}.ww-day-scene .ww-notice{background:#fff9e8d9;border-color:#f2d28a;color:#28394b}.ww-day-scene .ww-btn{color:#fff}@keyframes wwSunGlow{to{transform:scale(1.08);filter:brightness(1.15)}}.ww-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ww-panel{background:linear-gradient(145deg,#202b3c,#151d2a);border:1px solid #3a485a;border-radius:15px;padding:17px;box-shadow:0 8px 24px #02081244}.ww-panel h3{margin:0 0 7px;color:#fff}.ww-muted{font-size:12px;color:#aab4c3;line-height:1.65}.ww-btn{border:1px solid #c7a878;background:linear-gradient(110deg,#a77b4d,#76533e);color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.ww-btn:disabled{opacity:.4;cursor:not-allowed}.ww-btn.ghost{background:#202d40;border-color:#526176}.ww-btn.red{background:linear-gradient(110deg,#a74750,#702c3a);border-color:#c46a72}.ww-field{display:grid;gap:6px}.ww-field label{font-size:11px;color:#c2b49e;font-weight:800}.ww-field input,.ww-field select{width:100%;border:1px solid #4a5a70;background:#101824;color:#f4f7fb;border-radius:9px;padding:11px;outline:none}.ww-room{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ww-code{font:900 24px ui-monospace,monospace;letter-spacing:5px;color:#f2d4a5}.ww-players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.ww-player{padding:11px 12px;border:1px solid #3c4a5d;border-radius:10px;background:#111a27;font-size:13px}.ww-player small{display:block;color:#a2adbb;margin-top:3px}.ww-dead{opacity:.45;filter:grayscale(1)}.ww-secret{padding:22px;border:1px solid #b08a59;border-radius:14px;background:linear-gradient(130deg,#3a3024,#202838);text-align:center}.ww-secret.wolf{border-color:#a84e5b;background:linear-gradient(130deg,#3e202b,#202838)}.ww-secret .role{font-size:clamp(27px,4vw,40px);font-weight:1000;color:#f4d6a8}.ww-secret.wolf .role{color:#ffabb2}.ww-role-guide{margin-top:14px;padding:14px;border:1px solid #526176;border-radius:12px;background:#111b29;text-align:left;display:grid;gap:10px}.ww-role-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ww-role-guide-item{padding:10px;border:1px solid #34465b;border-radius:9px;background:#172335}.ww-role-guide-item b{display:block;color:#f2d4a5;font-size:11px;margin-bottom:4px}.ww-role-guide-item span{display:block;color:#c2ccd8;font-size:12px;line-height:1.6}.ww-role-guide-status{padding:8px 10px;border-radius:8px;background:#263b34;color:#b8efd0;font-size:11px;font-weight:800}.ww-role-guide-status.used{background:#422b32;color:#ffc2c9}@media(max-width:600px){.ww-role-guide-grid{grid-template-columns:1fr}}.ww-phase{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #4b5668;background:#111a27;border-radius:12px}.ww-phase strong{color:#f2d4a5}.ww-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-top:12px}.ww-action{padding:12px;border:1px solid #526176;background:#172335;color:#f7f2e9;border-radius:11px;text-align:left;cursor:pointer}.ww-action:hover{border-color:#d0ad7d;background:#293449}.ww-action b{display:block;margin-bottom:4px}.ww-action small{color:#aab4c3}.ww-result{text-align:center;padding:25px;border:1px solid #9e815d;border-radius:14px;background:linear-gradient(135deg,#302b29,#1b2635)}.ww-result h2{font-size:30px;margin:7px 0}.ww-lobby-card{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid #3a485a;border-radius:12px;background:#111a27}.ww-rule{display:grid;grid-template-columns:28px 1fr;gap:10px;margin:10px 0}.ww-rule span{width:27px;height:27px;border-radius:8px;background:#4a3d36;display:grid;place-items:center;font-weight:900;color:#f0d5ae}.ww-notice{padding:12px;border-radius:11px;background:#2d3442;border:1px solid #4b586a;color:#e6d6bd}.ww-role-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;margin:14px 0}.ww-role-option{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #526176;background:linear-gradient(145deg,#182638,#111a27);border-radius:12px;cursor:pointer}.ww-role-option input{accent-color:#c6a879;width:17px;height:17px}.ww-role-option b{display:block;color:#f5e8d2}.ww-role-option small{display:block;color:#aab4c3;font-size:10px;margin-top:3px}
 @media(max-width:680px){.ww-grid{grid-template-columns:1fr}.ww-body{padding:11px}.ww-hero{padding:20px}.ww-panel{padding:13px}}
 
 .bingo-main>aside,.im-shell aside,.ww-body>aside,.game-right-sidebar,.right-game-sidebar{max-height:calc(100vh - 150px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#7a8798 #182333;padding-right:5px}
@@ -177,7 +195,7 @@ function showWerewolfSkillEffect(kind,targetName=''){
   protect:{className:'protect',icon:'🛡️',asset:'/assets/death-fx/bodyguard-protect.gif',kicker:'GUARDIAN AEGIS · PROTECTION CAST',title:'กำแพงพิทักษ์ถูกกางออก',desc:'พลังป้องกันโอบล้อมเป้าหมาย ปกป้องจากอันตรายในค่ำคืนนี้'}
  };
  const cfg=configs[kind];if(!cfg)return Promise.resolve();
- document.getElementById('wwSkillFx')?.remove();
+ const existing=document.getElementById('wwSkillFx');if(existing)return wwSkillEffectPromise;
  const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
  const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
  el.innerHTML=`<button class="wwskill-close" type="button">ข้ามฉาก ×</button><div class="wwskill-card"><div class="wwskill-visual"><div class="wwskill-ring"></div><img src="${cfg.asset}" alt="" draggable="false"><span class="wwskill-fallback" hidden>${cfg.icon}</span></div><div class="wwskill-kicker">${cfg.kicker}</div><h2>${cfg.title}</h2><p>${cfg.desc}</p>${target}</div>`;
@@ -185,7 +203,7 @@ function showWerewolfSkillEffect(kind,targetName=''){
  const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
  img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
  let finish;wwSkillEffectPromise=new Promise(resolve=>{finish=resolve});
- const close=()=>{if(el.isConnected)el.remove();finish?.()};const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+ const close=()=>{if(el.isConnected)el.remove();finish?.();if(page==='werewolf'&&werewolfState?.room)render()};const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
  return wwSkillEffectPromise;
 }
 
@@ -302,7 +320,7 @@ async function refresh(){state=await api('/api/data?date='+encodeURIComponent(se
 
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
+function render(){if(!state)return;if(page==='werewolf'&&document.getElementById('wwSkillFx'))return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
 
 function stat(label,value,icon,sub){return `<div class="stat"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 
@@ -732,16 +750,18 @@ async function loadWerewolf(roomId, forceLobby=false){
  const next=await api('/api/werewolf'+q);
  if(requestSeq!==werewolfRequestSeq)return;
  const old=werewolfState?.room,now=next?.room;
+ // Never paint the night scene over an in-progress skill GIF, including polling races.
+ if(now?.phase==='night'&&document.getElementById('wwSkillFx'))await wwSkillEffectPromise;
  if(old&&now&&String(old.id)===String(now.id)){
   if(old.phase!==now.phase){
    if(now.phase==='night'){
     // Keep the spell scene on top and delay the night ambience until its animation has finished.
     if(document.getElementById('wwSkillFx'))await wwSkillEffectPromise;
-    GCSound.stopAmbient();GCSound.play('night');setTimeout(()=>{if(werewolfState?.room?.phase==='night')GCSound.playAmbient('night',.16)},900);
+    GCSound.stopAmbient();GCSound.play('night',.22);setTimeout(()=>{if(werewolfState?.room?.phase==='night')GCSound.playAmbient('night',.12)},1400);
    }
-   else if(now.phase==='day'){GCSound.stopAmbient();GCSound.play('bell');setTimeout(()=>{if(werewolfState?.room?.phase==='day')GCSound.play('rooster').then(ok=>{if(!ok)GCSound.play('dawn')})},450);}
-   else if(now.phase==='vote')GCSound.play('vote');
-   else if(now.phase==='hunter_shot')GCSound.play('hunter');
+   else if(now.phase==='day'){GCSound.stopAmbient();GCSound.play('bell',.28);setTimeout(()=>{if(werewolfState?.room?.phase==='day'){GCSound.play('rooster',.20);GCSound.playAmbient('day',.12)}},700);}
+   else if(now.phase==='vote'){GCSound.stopAmbient();GCSound.play('vote');}
+   else if(now.phase==='hunter_shot'){GCSound.stopAmbient();GCSound.play('hunter');}
    else if(now.phase==='finished'){
     GCSound.stopAmbient();
     const role=now.me?.role;
@@ -768,6 +788,10 @@ async function loadWerewolf(roomId, forceLobby=false){
   if(previousId!==now.me.deathEvent.id)showWerewolfDeathEffect(now.me.deathEvent,now.id);
  }
  werewolfState=next;
+ // Start a quiet ambience even when someone joins an already-running day/night phase.
+ if(now?.phase==='day')GCSound.playAmbient('day',.12);
+ else if(now?.phase==='night')GCSound.playAmbient('night',.12);
+ else if(now?.phase!=='lobby')GCSound.stopAmbient();
  if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
  if(!now||now.phase==='lobby')GCSound.stopAmbient();
  if(!next?.room&&roomId)localStorage.removeItem('gcWerewolfRoom');
@@ -910,8 +934,8 @@ function wireWerewolf(){
    GCSound.play(sound);
    // Skill animation is local to the acting player and only plays after the API accepts the action.
    const chosenPlayer=werewolfState?.room?.players?.find(x=>String(x.userId)===String(targetId));
-   if(role==='seer'&&type==='inspect')showWerewolfSkillEffect('seer',chosenPlayer?.name||'');
-   if(['bodyguard','guardian'].includes(role)&&type==='protect')showWerewolfSkillEffect('protect',chosenPlayer?.name||'');
+   if(role==='seer'&&type==='inspect')await showWerewolfSkillEffect('seer',chosenPlayer?.name||'');
+   if(['bodyguard','guardian'].includes(role)&&type==='protect')await showWerewolfSkillEffect('protect',chosenPlayer?.name||'');
    if(werewolfState?.room?.me){werewolfState.room.me.nightSubmitted=true;}
    if(role==='seer'&&type==='inspect'&&response.seerResult&&werewolfState?.room?.me){
     werewolfState.room.me.seerResult={isWolf:!!response.seerResult.isWolf,checkedAt:new Date().toISOString()};
