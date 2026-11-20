@@ -412,28 +412,31 @@ function wwCheckWin(room){
  if(wolves>=others){wwFinish(room,'wolf','จำนวนหมาป่าเท่ากับหรือมากกว่าชาวบ้าน · ฝ่ายหมาป่าชนะ');return true;}
  return false;
 }
-function wwCurrentNightRole(room){
- const alive=wwAlive(room);
- const order=['wolf','seer','detective','bodyguard','guardian','priest','witch','medium','assassin'];
- for(const role of order){
-  const group=role==='wolf'?alive.filter(p=>WW_WOLF_ROLES.includes(p.role)):alive.filter(p=>p.role===role);
-  if(!group.length)continue;
-  if(role==='priest'&&group.every(p=>p.priestSaveUsed))continue;
-  if(role==='medium'&&group.every(p=>p.mediumUsed))continue;
-  if(role==='assassin'&&group.every(p=>p.assassinUsed))continue;
-  if(group.every(p=>!!p.nightAction))continue;
-  return role;
- }
- return null;
+// ลำดับการทำภารกิจกลางคืน: ทำทีละบทบาท และข้ามบทบาทที่ไม่มี/หมดสิทธิ์ใช้สกิล
+const WW_NIGHT_STAGES=[
+  {roles:WW_WOLF_ROLES,label:'🐺 หมาป่า'},
+  {roles:['bodyguard'],label:'🛡️ บอดี้การ์ด'},
+  {roles:['guardian'],label:'✨ ผู้พิทักษ์'},
+  {roles:['seer'],label:'🔮 ผู้หยั่งรู้'},
+  {roles:['detective'],label:'🔍 นักสืบ'},
+  {roles:['priest'],label:'✝️ นักบวช'},
+  {roles:['witch'],label:'🧙 แม่มด'},
+  {roles:['medium'],label:'🔮 คนทรง'},
+  {roles:['assassin'],label:'🗡️ นักฆ่า'}
+];
+function wwStageDone(room,stage){
+  const members=wwAlive(room).filter(p=>stage.roles.includes(p.role));
+  if(!members.length)return true;
+  return members.every(p=>{
+    if(p.nightAction)return true;
+    if(p.role==='priest'&&p.priestSaveUsed)return true;
+    if(p.role==='medium'&&p.mediumUsed)return true;
+    if(p.role==='assassin'&&p.assassinUsed)return true;
+    return false;
+  });
 }
-function wwNightReady(room){
- const alive=wwAlive(room);
- const wolves=alive.filter(p=>WW_WOLF_ROLES.includes(p.role));
- const nightRoles=['seer','detective','witch','bodyguard','guardian'];
- const regularReady=nightRoles.every(role=>{const player=alive.find(p=>p.role===role);return !player||!!player.nightAction;});
- const oneUseReady=['priest','medium','assassin'].every(role=>{const player=alive.find(p=>p.role===role);if(!player)return true;const used=role==='priest'?player.priestSaveUsed:role==='medium'?player.mediumUsed:player.assassinUsed;return used||!!player.nightAction;});
- return wolves.every(p=>p.nightAction) && regularReady && oneUseReady;
-}
+function wwCurrentNightStage(room){return WW_NIGHT_STAGES.find(stage=>!wwStageDone(room,stage))||null;}
+function wwNightReady(room){return !wwCurrentNightStage(room);}
 function wwResolveNight(room){
  const alive=wwAlive(room),wolves=alive.filter(p=>WW_WOLF_ROLES.includes(p.role));
  const counts={};
@@ -481,12 +484,14 @@ function wwPublic(room,req){
  const wolfVoteRows=Object.entries(wolfVotes).sort((a,b)=>b[1]-a[1]);
  const witchAttackTarget=wolfVoteRows.length&&(!wolfVoteRows[1]||wolfVoteRows[0][1]>wolfVoteRows[1][1])?wolfVoteRows[0][0]:null;
  return {
-  id:room.id,code:room.code,title:room.title,phase:room.phase,activeNightRole:room.phase==='night'?wwCurrentNightRole(room):null,dayNumber:room.dayNumber||0,roleConfig:wwNormalizeRoleConfig(room.roleConfig),roleCounts:Object.fromEntries([...new Set(room.players.map(p=>p.role).filter(Boolean))].map(role=>[role,room.players.filter(p=>p.role===role).length])),
+  id:room.id,code:room.code,title:room.title,phase:room.phase,dayNumber:room.dayNumber||0,roleConfig:wwNormalizeRoleConfig(room.roleConfig),roleCounts:Object.fromEntries([...new Set(room.players.map(p=>p.role).filter(Boolean))].map(role=>[role,room.players.filter(p=>p.role===role).length])),
   hostId:room.hostId,hostName:room.hostName,isHost:String(room.hostId)===uid,meId:req.session.user.id,
   me:me?{role:me.role,alive:me.alive,mediumResult:me.mediumResult||null,mediumUsed:!!me.mediumUsed,detectiveResult:me.detectiveResult||null,priestSaveUsed:!!me.priestSaveUsed,assassinUsed:!!me.assassinUsed,kingSaved:!!me.kingSaved,deathEvent:me.deathEvent?{id:me.deathEvent.id,cause:me.deathEvent.cause,createdAt:me.deathEvent.createdAt}:null,nightSubmitted:!!me.nightAction,voted:!!me.voted,seerResult:me.seerResult?{isWolf:!!me.seerResult.isWolf,checkedAt:me.seerResult.checkedAt||null}:null,witchSaveUsed:!!me.witchSaveUsed,witchPoisonUsed:!!me.witchPoisonUsed}:null,
   players:room.players.map(p=>({userId:p.userId,name:p.name,alive:p.alive,left:!!p.left,role:roleReveal?p.role:undefined,isWolfMate:WW_WOLF_ROLES.includes(me?.role)&&WW_WOLF_ROLES.includes(p.role),nightSubmitted:!!p.nightAction,voted:!!p.voted})),
   aliveCount:alive.length,wolfCount:alive.filter(p=>WW_WOLF_ROLES.includes(p.role)).length,
   nightReady:room.phase==='night'?wwNightReady(room):false,
+  currentNightRole:room.phase==='night'?(wwCurrentNightStage(room)?.label||'กำลังสรุปผลกลางคืน'):null,
+  myNightTurn:room.phase==='night'&&!!me?.alive&&!!wwCurrentNightStage(room)&&wwCurrentNightStage(room).roles.includes(me.role)&&!me.nightAction,
   pendingHunterId:room.phase==='hunter_shot'?room.pendingHunterId:null,pendingHunterName:room.phase==='hunter_shot'?room.players.find(p=>String(p.userId)===String(room.pendingHunterId))?.name:null,
   voteCount:alive.filter(p=>p.voted).length,
   lastNight:room.phase==='day'||room.phase==='vote'||room.phase==='hunter_shot'||room.phase==='finished'?room.lastNight||null:null,
@@ -606,9 +611,8 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
  if(!r||r.phase!=='night')return res.status(400).json({error:'ตอนนี้ไม่ใช่ช่วงกลางคืน'});
  const p=r.players.find(x=>String(x.userId)===String(req.session.user.id));
  if(!p||!p.alive)return res.status(403).json({error:'คุณไม่มีสิทธิ์ดำเนินการ'});
- const activeRole=wwCurrentNightRole(r);
- const isWolfTurn=activeRole==='wolf'&&WW_WOLF_ROLES.includes(p.role);
- if(!isWolfTurn&&p.role!==activeRole)return res.status(403).json({error:'ยังไม่ถึงคิวบทบาทของคุณ'});
+ const activeStage=wwCurrentNightStage(r);
+ if(!activeStage||!activeStage.roles.includes(p.role))return res.status(403).json({error:`ยังไม่ถึงคิวบทบาทของคุณ · ตอนนี้ ${activeStage?.label||'กำลังสรุปผลกลางคืน'}`});
  const type=String(req.body?.type||''),targetId=String(req.body?.targetId||'');
  // Retry-safe: if the same inspection request is repeated, return its saved result without running it twice.
  if(p.nightAction){
