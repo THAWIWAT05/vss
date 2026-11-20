@@ -723,9 +723,11 @@ function spectatorPublicSnapshot(game, r) {
   const base = spectatorRoomMeta(game,r);
   if (game === 'bingo') return {...base,drawn:(Array.isArray(r.drawn)?r.drawn:[]),winners:r.winners|| (r.winner?[r.winner]:[]),
     players:p.map(x=>({name:String(x.name||'ผู้เล่น'),marked:Array.isArray(x.marked)?x.marked.filter(Boolean).length:0,card:Array.isArray(x.card)?x.card:[],markedCells:Array.isArray(x.marked)?x.marked:[]}))};
-  if (game === 'impostor') return {...base,phase:r.phase,categoryLabel:IMPOSTOR_CATEGORY_LABELS[r.category]||'เกมทายคำ',
-    players:p.map(x=>({name:String(x.name||'ผู้เล่น'),clue:String(x.clue||''),voted:!!x.voted,alive:x.alive!==false}))};
+  if (game === 'impostor') return {...base,phase:r.phase,categoryLabel:IMPOSTOR_CATEGORY_LABELS[r.category]||'เกมทายคำ',winner:r.winner||null,resultText:String(r.resultText||''),
+    clues:p.filter(x=>x.clue&&x.alive!==false).map(x=>({name:String(x.name||'ผู้เล่น'),text:String(x.clue)})),
+    players:p.map(x=>({name:String(x.name||'ผู้เล่น'),clue:String(x.clue||''),voted:!!x.voted,alive:x.alive!==false,submitted:!!x.clue}))};
   return {...base,phase:r.phase,dayNumber:Number(r.dayNumber)||0,winner:r.winner||null,resultText:String(r.resultText||''),
+    lastNight:r.phase==='day'&&r.lastNight?{killed:Array.isArray(r.lastNight.killed)?r.lastNight.killed.map(String):[]}:null,
     players:p.filter(x=>!x.left).map(x=>({name:String(x.name||'ผู้เล่น'),alive:x.alive!==false,voted:!!x.voted,nightSubmitted:!!x.nightAction}))};
 }
 app.get('/api/spectator/rooms', auth, (req,res) => {
@@ -800,13 +802,15 @@ app.get('/api/admin/game-rooms', auth, adminOnly, (req,res)=>{
   return {id:String(r.id??''),game:'impostor',title:String(r.title||'IMPOSTOR ROOM'),status:String(r.phase||'lobby'),
    hostName:String(r.hostName||'-'),createdAt:r.createdAt||null,playerCount:players.length,code:String(r.code||''),
    category:String(r.category||''),word:r.word||null,winner:r.winner||null,resultText:String(r.resultText||''),
-   players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),role:p?.role||'ยังไม่สุ่ม',alive:p?.alive!==false,clue:String(p?.clue||''),voted:!!p?.voted}))};
+   clues:players.filter(p=>p?.clue&&p?.alive!==false).map(p=>({name:String(p?.name||'ผู้เล่น'),text:String(p.clue)})),
+   players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),role:p?.role||'ยังไม่สุ่ม',alive:p?.alive!==false,clue:String(p?.clue||''),submitted:!!p?.clue,voted:!!p?.voted}))};
  });
  const werewolf=(Array.isArray(db.werewolfRooms)?db.werewolfRooms:[]).filter(Boolean).map(r=>{
   const players=roomPlayers(r);
   return {id:String(r.id??''),game:'werewolf',title:String(r.title||'หมู่บ้านรัตติกาล'),status:String(r.phase||'lobby'),
    hostName:String(r.hostName||'-'),createdAt:r.createdAt||null,playerCount:players.length,code:String(r.code||''),
    dayNumber:Number(r.dayNumber)||0,winner:r.winner||null,resultText:String(r.resultText||''),
+   lastNight:r.lastNight?{killed:Array.isArray(r.lastNight.killed)?r.lastNight.killed.map(String):[]}:null,
    players:players.map(p=>({name:String(p?.name||'ไม่ทราบชื่อ'),role:p?.role||'ยังไม่สุ่ม',alive:p?.alive!==false,left:!!p?.left,nightSubmitted:!!p?.nightAction,voted:!!p?.voted}))};
  });
  const rooms=[...bingo,...impostor,...werewolf].filter(r=>r.id).sort((a,b)=>{
