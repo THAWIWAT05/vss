@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
-let historyAbsentOnly = false;
+let historyAbsentOnly = false, gameSpectatorData = null, gameSpectatorSelected = null, gameSpectatorRequestSeq = 0, gameSpectatorLoading = false;
 let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
-const pageNames = { dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
+const pageNames = { dashboard:'ภาพรวม', spectator:'ศูนย์ผู้ชมเกม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
 const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
@@ -173,8 +173,10 @@ function installReportsNav(){
  if(!impostorBtn){impostorBtn=document.createElement('button');impostorBtn.className='nav-item';impostorBtn.dataset.page='impostor';impostorBtn.innerHTML='<span>🕵️</span><span>IMPOSTOR</span>';impostorBtn.addEventListener('click',()=>{page='impostor';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===impostorBtn));loadImpostor().catch(e=>toast(e.message));render()});}
  let werewolfBtn=document.querySelector('.nav-item[data-page="werewolf"]');
  if(!werewolfBtn){werewolfBtn=document.createElement('button');werewolfBtn.className='nav-item';werewolfBtn.dataset.page='werewolf';werewolfBtn.innerHTML='<span>🐺</span><span>WEREWOLF</span>';werewolfBtn.addEventListener('click',()=>{page='werewolf';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===werewolfBtn));loadWerewolf().catch(e=>toast(e.message));render()});}
+ let spectatorBtn=document.querySelector('.nav-item[data-page="spectator"]');
+ if(!spectatorBtn){spectatorBtn=document.createElement('button');spectatorBtn.className='nav-item';spectatorBtn.dataset.page='spectator';spectatorBtn.innerHTML='<span>👁️</span><span>ศูนย์ผู้ชมเกม</span>';spectatorBtn.addEventListener('click',()=>{if(!isAdmin())return;page='spectator';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===spectatorBtn));loadGameSpectator().catch(e=>toast(e.message));render()});}
  const auditBtn=document.querySelector('.nav-item[data-page="audit"]');
- if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn);
+ if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn);
 }
 function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
@@ -251,15 +253,48 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','spectator','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message));if(!window.gcSpectatorTimer)window.gcSpectatorTimer=setInterval(()=>{if(page==='spectator'&&!document.hidden)loadGameSpectator().catch(()=>{})},5000)}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
+function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,spectator,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
 
 function stat(label,value,icon,sub){return `<div class="stat"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
+
+
+async function loadGameSpectator(){
+ if(!isAdmin())throw new Error('เฉพาะแอดมินเท่านั้น');
+ // Ignore stale responses when a slow request overlaps a newer refresh.
+ const requestSeq=++gameSpectatorRequestSeq;
+ gameSpectatorLoading=true;
+ try{
+  const next=await api('/api/admin/game-rooms');
+  if(requestSeq!==gameSpectatorRequestSeq)return;
+  gameSpectatorData=next&&Array.isArray(next.rooms)?next:{rooms:[],summary:{total:0,waiting:0,playing:0,finished:0}};
+  if(gameSpectatorSelected&&!gameSpectatorData.rooms.some(r=>`${r.game}:${r.id}`===gameSpectatorSelected))gameSpectatorSelected=null;
+  if(page==='spectator')render();
+ }finally{if(requestSeq===gameSpectatorRequestSeq)gameSpectatorLoading=false;}
+}
+function spectatorStatus(s){return ({waiting:'รอผู้เล่น',lobby:'ห้องรอ',playing:'กำลังเล่น',clue:'รอบใบ้คำ',vote:'กำลังโหวต',guess:'ทายคำสุดท้าย',night:'กลางคืน',day:'กลางวัน',hunter_shot:'ช่วงนายพราน',finished:'จบเกม'})[s]||s}
+function spectator(){
+ if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงหน้านี้</div>';
+ const data=gameSpectatorData,rooms=data?.rooms||[],selected=rooms.find(r=>r.game+':'+r.id===gameSpectatorSelected);
+ const style=`<style>
+ .gs-wrap{display:grid;gap:16px}.gs-hero{padding:24px;border-radius:18px;background:linear-gradient(115deg,#101827,#263c55 65%,#49334d);color:#fff;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.gs-hero h2{font-size:28px;margin:4px 0}.gs-muted{color:#94a3b8;font-size:12px}.gs-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.gs-stat,.gs-card,.gs-detail{background:var(--panel,#fff);border:1px solid var(--line,#dce2e9);border-radius:14px;padding:15px}.gs-stat b{font-size:25px;display:block}.gs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.gs-card{display:grid;gap:10px}.gs-card-top{display:flex;justify-content:space-between;gap:8px;align-items:center}.gs-tag{font-size:10px;font-weight:900;border-radius:20px;padding:5px 9px;background:#e9eef5;color:#334155}.gs-tag.live{background:#fee2e2;color:#991b1b}.gs-tag.wait{background:#dcfce7;color:#166534}.gs-btn{border:0;border-radius:9px;padding:9px 13px;background:#233e5c;color:#fff;font-weight:800;cursor:pointer}.gs-btn.alt{background:#e8edf3;color:#1e293b}.gs-player-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.gs-player{padding:10px;border:1px solid var(--line,#dce2e9);border-radius:10px;font-size:12px}.gs-player small{display:block;color:#64748b;margin-top:4px}.gs-balls{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}.gs-ball{padding:6px 1px;text-align:center;border-radius:6px;background:#edf1f5;font-size:11px}.gs-ball.hit{background:#145b4d;color:white}.gs-detail h3{margin:0 0 10px}.gs-empty{padding:30px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:14px}@media(max-width:650px){.gs-stats{grid-template-columns:repeat(2,1fr)}.gs-balls{grid-template-columns:repeat(8,1fr)}}
+ </style>`;
+ const cards=rooms.map(r=>`<article class="gs-card"><div class="gs-card-top"><b>${r.game==='bingo'?'🎯 BINGO':r.game==='impostor'?'🕵️ IMPOSTOR':'🐺 WEREWOLF'}</b><span class="gs-tag ${['playing','clue','vote','guess','night','day','hunter_shot'].includes(r.status)?'live':['waiting','lobby'].includes(r.status)?'wait':''}">${spectatorStatus(r.status)}</span></div><div><b>${esc(r.title)}</b><div class="gs-muted">เจ้าของ ${esc(r.hostName)} · ${r.playerCount} คน · ${r.createdAt?fmt(r.createdAt):'-'}</div>${r.code?`<div class="gs-muted">รหัส ${esc(r.code)}</div>`:''}</div><button class="gs-btn" data-gs-open="${esc(r.game)}:${esc(r.id)}">👁️ ดูภาพรวมเกม</button></article>`).join('');
+ let detail='';
+ if(selected){
+  const players=selected.players||[];
+  detail=`<section class="gs-detail"><div class="gs-card-top"><div><div class="gs-muted">LIVE SPECTATOR · ${selected.game.toUpperCase()}</div><h3>${esc(selected.title)}</h3><div class="gs-muted">เจ้าของ ${esc(selected.hostName)} · ${spectatorStatus(selected.status)} · ${players.length} ผู้เล่น</div></div><button class="gs-btn alt" id="gsClose">ปิดภาพรวม</button></div>
+  ${selected.game==='bingo'?`<p><b>เลขที่สุ่มแล้ว:</b> ${selected.drawn.length}/75 · <b>ผู้ชนะ:</b> ${(selected.winners||[]).map(w=>esc(w.name)).join(', ')||'-'}</p><div class="gs-balls">${Array.from({length:75},(_,i)=>i+1).map(n=>`<span class="gs-ball ${selected.drawn.includes(n)?'hit':''}">${String(n).padStart(2,'0')}</span>`).join('')}</div><h4>ผู้เล่นและความคืบหน้าบัตร</h4><div class="gs-player-list">${players.map(p=>`<div class="gs-player"><b>${esc(p.name)}</b><small>วงแล้ว ${p.marked}/25</small></div>`).join('')||'<div class="gs-muted">ยังไม่มีผู้เล่น</div>'}</div>`:
+  `<div class="gs-player-list">${players.map(p=>`<div class="gs-player"><b>${esc(p.name)}</b><small>${selected.game==='impostor'?`บทบาท: ${esc(p.role)} · ${p.alive?'ยังอยู่':'ออกจากเกม'}${p.clue?' · คำใบ้: '+esc(p.clue):''}`:`บทบาท: ${esc(p.role)} · ${p.alive?'ยังมีชีวิต':'ออกจากเกม'}${p.left?' · ออกจากห้อง':''}`}</small></div>`).join('')||'<div class="gs-muted">ยังไม่มีผู้เล่น</div>'}</div>${selected.game==='impostor'?`<p class="gs-muted">หมวด ${esc(selected.category||'-')} · คำลับ ${selected.word?esc(selected.word):'ยังไม่เริ่มสุ่มคำ'} · ผล ${esc(selected.resultText||'-')}</p>`:`<p class="gs-muted">วันที่ ${selected.dayNumber||0} · ผล ${esc(selected.resultText||'-')}</p>`}`}
+  </section>`;
+ }
+ return `${style}<div class="gs-wrap"><section class="gs-hero"><div><div class="gs-muted" style="color:#b7c9dc;letter-spacing:2px">GANG CONTROL / ADMIN ONLY</div><h2>ศูนย์ผู้ชมเกม</h2><div style="color:#d2deeb">ดูภาพรวมทุกห้องได้ทันทีตั้งแต่สร้างห้อง ไม่ต้องรอเริ่มเกม · โหมดอ่านอย่างเดียว ไม่รบกวนผู้เล่น</div></div><button class="gs-btn" id="gsRefresh">↻ รีเฟรชข้อมูล</button></section><div class="gs-stats"><div class="gs-stat"><span class="gs-muted">ห้องทั้งหมด</span><b>${data?.summary?.total??'—'}</b></div><div class="gs-stat"><span class="gs-muted">ห้องรอผู้เล่น</span><b>${data?.summary?.waiting??'—'}</b></div><div class="gs-stat"><span class="gs-muted">กำลังเล่น</span><b>${data?.summary?.playing??'—'}</b></div><div class="gs-stat"><span class="gs-muted">จบเกมแล้ว</span><b>${data?.summary?.finished??'—'}</b></div></div>${detail}<section><div class="panel-head"><div><h3>ห้องเกมทั้งหมด</h3><div class="gs-muted">ห้องที่เพิ่งสร้างจะแสดงทันที แม้อยู่ในสถานะห้องรอ</div></div></div><div class="gs-grid">${cards||'<div class="gs-empty">ยังไม่มีห้องเกมที่เปิดอยู่</div>'}</div></section></div>`;
+}
 
 function dashboard(){
  const active=state.members.filter(m=>m.active);
@@ -914,6 +949,10 @@ async function loadBingo(roomId,forceLobby=false){
 async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.stringify(body)});await loadBingo(bingoState?.room?.id)}
 
 function wire(){
+ $('#gsRefresh')?.addEventListener('click',async e=>{const b=e.currentTarget;if(b.disabled)return;b.disabled=true;try{await loadGameSpectator()}catch(err){toast(err.message)}finally{b.disabled=false}});
+ document.querySelectorAll('[data-gs-open]').forEach(b=>b.addEventListener('click',()=>{gameSpectatorSelected=b.dataset.gsOpen;render()}));
+ $('#gsClose')?.addEventListener('click',()=>{gameSpectatorSelected=null;render()});
+
  if(page==='bingo'){
   $('#bingoCreate')?.addEventListener('click',async()=>{
    const button=$('#bingoCreate');
