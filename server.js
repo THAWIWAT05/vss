@@ -72,7 +72,7 @@ function ensureTestAccounts(db) {
 }
 
 function normalizeDB(db) {
-  for (const k of ['users', 'members', 'items', 'attendance', 'requests', 'deliveries', 'dailyTasks', 'contributions', 'withdrawals', 'logs', 'bingoRooms', 'impostorRooms', 'werewolfRooms']) if (!Array.isArray(db[k])) db[k] = [];
+  for (const k of ['users', 'members', 'items', 'attendance', 'requests', 'deliveries', 'dailyTasks', 'contributions', 'withdrawals', 'logs', 'bingoRooms', 'impostorRooms', 'werewolfRooms', 'spectatorRequests']) if (!Array.isArray(db[k])) db[k] = [];
   return db;
 }
 function readDB() {
@@ -704,6 +704,84 @@ app.post('/api/werewolf/:id/rematch',auth,(req,res)=>{
 // Admin records attendance for each member in one of the three daily sessions.
 
 // ADMIN LIVE SPECTATOR CENTER — read-only overview of every game room, including lobby rooms.
+
+// Spectator requests: members request access; only admins can approve or deny.
+function spectatorFindRoom(db, game, id) {
+  if (game === 'bingo') return (db.bingoRooms || []).find(r => String(r.id) === String(id) && r.status !== 'closed');
+  if (game === 'impostor') return (db.impostorRooms || []).find(r => String(r.id) === String(id) && r.phase !== 'closed');
+  if (game === 'werewolf') return (db.werewolfRooms || []).find(r => String(r.id) === String(id) && r.phase !== 'closed');
+  return null;
+}
+function spectatorRoomMeta(game, r) {
+  const players = Array.isArray(r.players) ? r.players : [];
+  const status = game === 'bingo' ? r.status : r.phase;
+  return {game,id:String(r.id),title:String(r.title || (game==='werewolf'?'หมู่บ้านรัตติกาล':game.toUpperCase())),status:String(status||'waiting'),
+    hostName:String(r.hostName||'-'),playerCount:players.length,createdAt:r.createdAt||null,code:String(r.code||'')};
+}
+function spectatorPublicSnapshot(game, r) {
+  const p = Array.isArray(r.players) ? r.players : [];
+  const base = spectatorRoomMeta(game,r);
+  if (game === 'bingo') return {...base,drawn:(Array.isArray(r.drawn)?r.drawn:[]),winners:r.winners|| (r.winner?[r.winner]:[]),
+    players:p.map(x=>({name:String(x.name||'ผู้เล่น'),marked:Array.isArray(x.marked)?x.marked.filter(Boolean).length:0,card:Array.isArray(x.card)?x.card:[],markedCells:Array.isArray(x.marked)?x.marked:[]}))};
+  if (game === 'impostor') return {...base,phase:r.phase,categoryLabel:IMPOSTOR_CATEGORY_LABELS[r.category]||'เกมทายคำ',
+    players:p.map(x=>({name:String(x.name||'ผู้เล่น'),clue:String(x.clue||''),voted:!!x.voted,alive:x.alive!==false}))};
+  return {...base,phase:r.phase,dayNumber:Number(r.dayNumber)||0,winner:r.winner||null,resultText:String(r.resultText||''),
+    players:p.filter(x=>!x.left).map(x=>({name:String(x.name||'ผู้เล่น'),alive:x.alive!==false,voted:!!x.voted,nightSubmitted:!!x.nightAction}))};
+}
+app.get('/api/spectator/rooms', auth, (req,res) => {
+ const db=readDB(), rooms=[];
+ for (const game of ['bingo','impostor','werewolf']) {
+  const list=game==='bingo'?db.bingoRooms:game==='impostor'?db.impostorRooms:db.werewolfRooms;
+  for(const r of (list||[])) {
+   const status=game==='bingo'?r.status:r.phase;
+   if(!['closed','finished'].includes(status)) rooms.push(spectatorRoomMeta(game,r));
+  }
+ }
+ res.set('Cache-Control','no-store');res.json({rooms});
+});
+app.get('/api/spectator/requests', auth, (req,res) => {
+ const db=readDB(), all=db.spectatorRequests||[];
+ const rows=admin(req)?all:all.filter(x=>String(x.userId)===String(req.session.user.id));
+ res.set('Cache-Control','no-store');res.json({requests:rows.slice().sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+});
+app.post('/api/spectator/requests', auth, (req,res) => {
+ const db=readDB(), game=String(req.body?.game||''), roomId=String(req.body?.roomId||'');
+ if(!['bingo','impostor','werewolf'].includes(game)||!roomId)return res.status(400).json({error:'เลือกห้องเกมไม่ถูกต้อง'});
+ const room=spectatorFindRoom(db,game,roomId);
+ if(!room)return res.status(404).json({error:'ห้องนี้ปิดหรือไม่มีอยู่แล้ว'});
+ const roomStatus=game==='bingo'?room.status:room.phase;
+ if(['finished','closed'].includes(roomStatus))return res.status(409).json({error:'เกมนี้จบแล้ว ไม่สามารถขอเข้าชมใหม่ได้'});
+ if((room.players||[]).some(p=>String(p.userId)===String(req.session.user.id)))return res.status(409).json({error:'คุณเป็นผู้เล่นในห้องนี้ จึงไม่สามารถขอเข้าชมได้'});
+ const existing=(db.spectatorRequests||[]).find(x=>String(x.userId)===String(req.session.user.id)&&x.game===game&&String(x.roomId)===roomId&&['pending','approved'].includes(x.status));
+ if(existing)return res.json({ok:true,request:existing,existing:true});
+ const row={id:`sp-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,game,roomId,userId:String(req.session.user.id),userName:String(req.session.user.name||'สมาชิก'),roomTitle:String(room.title||game.toUpperCase()),status:'pending',createdAt:isoNow(),updatedAt:isoNow()};
+ db.spectatorRequests.push(row);db.spectatorRequests=db.spectatorRequests.filter(x=>['pending','approved'].includes(x.status)||Date.now()-(Date.parse(x.updatedAt||x.createdAt)||0)<30*24*60*60*1000).slice(-1000);log(db,req.session.user.name,'ขอเข้าชมเกม',`${row.roomTitle} · ${game}`);writeDB(db);res.json({ok:true,request:row});
+});
+app.delete('/api/spectator/requests/:id', auth, (req,res) => {
+ const db=readDB(), row=(db.spectatorRequests||[]).find(x=>String(x.id)===String(req.params.id));
+ if(!row)return res.status(404).json({error:'ไม่พบคำขอ'});
+ if(!admin(req)&&String(row.userId)!==String(req.session.user.id))return res.status(403).json({error:'ไม่มีสิทธิ์ยกเลิกคำขอนี้'});
+ if(!['pending','approved'].includes(row.status))return res.status(400).json({error:'คำขอนี้ดำเนินการไปแล้ว'});
+ row.status='cancelled';row.updatedAt=isoNow();log(db,req.session.user.name,'ยกเลิกคำขอเข้าชม',row.roomTitle);writeDB(db);res.json({ok:true});
+});
+app.post('/api/admin/spectator/requests/:id/decision', auth, adminOnly, (req,res) => {
+ const db=readDB(), row=(db.spectatorRequests||[]).find(x=>String(x.id)===String(req.params.id));
+ const decision=String(req.body?.decision||'');
+ if(!row)return res.status(404).json({error:'ไม่พบคำขอ'});
+ if(row.status!=='pending')return res.status(409).json({error:'คำขอนี้ได้รับการดำเนินการแล้ว'});
+ if(!['approved','denied'].includes(decision))return res.status(400).json({error:'คำสั่งไม่ถูกต้อง'});
+ if(decision==='approved'&&(!spectatorFindRoom(db,row.game,row.roomId)||['finished','closed'].includes(row.game==='bingo'?spectatorFindRoom(db,row.game,row.roomId)?.status:spectatorFindRoom(db,row.game,row.roomId)?.phase))){row.status='denied';row.updatedAt=isoNow();writeDB(db);return res.status(410).json({error:'ห้องเกมปิดไปแล้ว คำขอถูกปฏิเสธอัตโนมัติ'});}
+ row.status=decision;row.decidedBy=String(req.session.user.name||'แอดมิน');row.updatedAt=isoNow();log(db,req.session.user.name,decision==='approved'?'อนุมัติผู้ชมเกม':'ปฏิเสธคำขอชมเกม',`${row.userName} · ${row.roomTitle}`);writeDB(db);res.json({ok:true,request:row});
+});
+app.get('/api/spectator/room/:game/:id', auth, (req,res) => {
+ const db=readDB(),game=String(req.params.game),id=String(req.params.id);
+ if(!['bingo','impostor','werewolf'].includes(game))return res.status(400).json({error:'ประเภทเกมไม่ถูกต้อง'});
+ const allowed=admin(req)||(db.spectatorRequests||[]).some(x=>String(x.userId)===String(req.session.user.id)&&x.game===game&&String(x.roomId)===id&&x.status==='approved');
+ if(!allowed)return res.status(403).json({error:'ยังไม่ได้รับอนุมัติให้เข้าชม'});
+ const room=spectatorFindRoom(db,game,id);if(!room)return res.status(404).json({error:'ห้องเกมนี้ปิดแล้ว'});
+ res.set('Cache-Control','no-store');res.json({room:spectatorPublicSnapshot(game,room),serverNow:Date.now()});
+});
+
 app.get('/api/admin/game-rooms', auth, adminOnly, (req,res)=>{
  const db=readDB();
  // Defensive normalization keeps one malformed legacy room from breaking the whole dashboard.
