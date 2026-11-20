@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
-let historyAbsentOnly = false, gameSpectatorData = null, gameSpectatorSelected = null, gameSpectatorRequestSeq = 0, gameSpectatorLoading = false;
+let historyAbsentOnly = false, gameSpectatorData = null, gameSpectatorSelected = null, gameSpectatorRequestSeq = 0, gameSpectatorLoading = false, spectatorRoomsData = [], spectatorRequestsData = [], spectatorRoomData = null, spectatorRoomKey = '', spectatorRequestBusy = false;
 let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
-const pageNames = { dashboard:'ภาพรวม', spectator:'ศูนย์ผู้ชมเกม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
+const pageNames = { dashboard:'ภาพรวม', spectator:'ศูนย์ผู้ชมเกม', spectatorLobby:'ขอเข้าชมเกม', spectatorRoom:'ห้องรับชมเกม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
 const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
@@ -175,8 +175,10 @@ function installReportsNav(){
  if(!werewolfBtn){werewolfBtn=document.createElement('button');werewolfBtn.className='nav-item';werewolfBtn.dataset.page='werewolf';werewolfBtn.innerHTML='<span>🐺</span><span>WEREWOLF</span>';werewolfBtn.addEventListener('click',()=>{page='werewolf';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===werewolfBtn));loadWerewolf().catch(e=>toast(e.message));render()});}
  let spectatorBtn=document.querySelector('.nav-item[data-page="spectator"]');
  if(!spectatorBtn){spectatorBtn=document.createElement('button');spectatorBtn.className='nav-item';spectatorBtn.dataset.page='spectator';spectatorBtn.innerHTML='<span>👁️</span><span>ศูนย์ผู้ชมเกม</span>';spectatorBtn.addEventListener('click',()=>{if(!isAdmin())return;page='spectator';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===spectatorBtn));loadGameSpectator().catch(e=>toast(e.message));render()});}
+ let watchBtn=document.querySelector('.nav-item[data-page="spectatorLobby"]');
+ if(!watchBtn){watchBtn=document.createElement('button');watchBtn.className='nav-item';watchBtn.dataset.page='spectatorLobby';watchBtn.innerHTML='<span>🍿</span><span>ขอเข้าชมเกม</span>';watchBtn.addEventListener('click',()=>{page='spectatorLobby';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===watchBtn));loadSpectatorLobby().catch(e=>toast(e.message));render()});}
  const auditBtn=document.querySelector('.nav-item[data-page="audit"]');
- if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn);
+ if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn,watchBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,spectatorBtn,watchBtn);
 }
 function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
@@ -253,17 +255,27 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','spectator','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message));if(!window.gcSpectatorTimer)window.gcSpectatorTimer=setInterval(()=>{if(page==='spectator'&&!document.hidden)loadGameSpectator().catch(()=>{})},5000)}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','spectator','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message));if(!window.gcSpectatorTimer)window.gcSpectatorTimer=setInterval(()=>{if(!document.hidden){if(page==='spectator')loadGameSpectator().catch(()=>{});else if(page==='spectatorLobby')loadSpectatorLobby().catch(()=>{});else if(page==='spectatorRoom')loadSpectatorRoom().catch(()=>{})}},5000)}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='audit')loadAudit().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,spectator,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
+function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={dashboard,spectator,spectatorLobby,spectatorRoom,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();}
 
 function stat(label,value,icon,sub){return `<div class="stat"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 
 
+
+async function loadSpectatorAdminRequests(){
+ if(!isAdmin())return;
+ const d=await api('/api/spectator/requests');
+ spectatorRequestsData=Array.isArray(d.requests)?d.requests:[];
+ const box=$('#gsRequestsList');if(!box)return;
+ const pending=spectatorRequestsData.filter(x=>x.status==='pending');
+ box.innerHTML=pending.length?pending.map(q=>`<div class="gs-player"><div><b>${esc(q.userName)}</b><small>${esc(q.roomTitle)} · ${q.game.toUpperCase()} · ${fmt(q.createdAt)}</small></div><div style="display:flex;gap:6px"><button class="gs-btn" data-gs-approve="${esc(q.id)}">อนุมัติ</button><button class="gs-btn alt" data-gs-deny="${esc(q.id)}">ปฏิเสธ</button></div></div>`).join(''):'<div class="gs-muted">ไม่มีคำขอที่รออนุมัติ</div>';
+ box.querySelectorAll('[data-gs-approve],[data-gs-deny]').forEach(b=>b.addEventListener('click',async()=>{if(b.disabled)return;b.disabled=true;const decision=b.hasAttribute('data-gs-approve')?'approved':'denied';try{await api(`/api/admin/spectator/requests/${encodeURIComponent(b.dataset.gsApprove||b.dataset.gsDeny)}/decision`,{method:'POST',body:JSON.stringify({decision})});await loadSpectatorAdminRequests();toast(decision==='approved'?'อนุมัติผู้ชมแล้ว':'ปฏิเสธคำขอแล้ว')}catch(e){toast(e.message)}finally{b.disabled=false}}));
+}
 async function loadGameSpectator(){
  if(!isAdmin())throw new Error('เฉพาะแอดมินเท่านั้น');
  // Ignore stale responses when a slow request overlaps a newer refresh.
@@ -274,10 +286,51 @@ async function loadGameSpectator(){
   if(requestSeq!==gameSpectatorRequestSeq)return;
   gameSpectatorData=next&&Array.isArray(next.rooms)?next:{rooms:[],summary:{total:0,waiting:0,playing:0,finished:0}};
   if(gameSpectatorSelected&&!gameSpectatorData.rooms.some(r=>`${r.game}:${r.id}`===gameSpectatorSelected))gameSpectatorSelected=null;
-  if(page==='spectator')render();
+  if(page==='spectator'){render();loadSpectatorAdminRequests().catch(()=>{})}
  }finally{if(requestSeq===gameSpectatorRequestSeq)gameSpectatorLoading=false;}
 }
 function spectatorStatus(s){return ({waiting:'รอผู้เล่น',lobby:'ห้องรอ',playing:'กำลังเล่น',clue:'รอบใบ้คำ',vote:'กำลังโหวต',guess:'ทายคำสุดท้าย',night:'กลางคืน',day:'กลางวัน',hunter_shot:'ช่วงนายพราน',finished:'จบเกม'})[s]||s}
+
+async function loadSpectatorLobby(){
+ const [rooms,requests]=await Promise.all([api('/api/spectator/rooms'),api('/api/spectator/requests')]);
+ spectatorRoomsData=Array.isArray(rooms.rooms)?rooms.rooms:[];
+ spectatorRequestsData=Array.isArray(requests.requests)?requests.requests:[];
+ if(page==='spectatorLobby')render();
+}
+async function loadSpectatorRoom(){
+ if(!spectatorRoomKey)return;
+ const [game,id]=spectatorRoomKey.split(':');
+ if(isAdmin()){
+  const next=await api('/api/admin/game-rooms');
+  spectatorRoomData=(next.rooms||[]).find(x=>x.game===game&&String(x.id)===String(id))||null;
+ }else{
+  const next=await api(`/api/spectator/room/${encodeURIComponent(game)}/${encodeURIComponent(id)}`);
+  spectatorRoomData=next.room||null;
+ }
+ if(page==='spectatorRoom')render();
+}
+function spectatorLobby(){
+ const reqs=spectatorRequestsData||[];
+ const byKey=new Map(reqs.map(x=>[`${x.game}:${x.roomId}`,x]));
+ const labels={bingo:'BINGO',impostor:'IMPOSTOR',werewolf:'WEREWOLF'};
+ const statusLabel={pending:'รอแอดมินอนุมัติ',approved:'อนุมัติแล้ว',denied:'ไม่อนุมัติ',cancelled:'ยกเลิกแล้ว'};
+ const cards=(spectatorRoomsData||[]).map(r=>{
+  const key=`${r.game}:${r.id}`,q=byKey.get(key),approved=q?.status==='approved',pending=q?.status==='pending';
+  return `<article class="watch-card"><div class="watch-card-head"><span>${r.game==='bingo'?'🎯':r.game==='impostor'?'🕵️':'🐺'} ${labels[r.game]}</span><span class="watch-status">${esc(spectatorStatus(r.status))}</span></div><h3>${esc(r.title)}</h3><p>เจ้าของห้อง ${esc(r.hostName)} · ผู้เล่น ${r.playerCount} คน</p><div class="watch-card-actions">${approved?`<button class="watch-primary" data-watch-enter="${esc(key)}">▶ เข้าห้องรับชม</button>`:pending?`<button class="watch-pending" disabled>⌛ รออนุมัติจากแอดมิน</button><button class="watch-cancel" data-watch-cancel="${esc(q.id)}">ยกเลิกคำขอ</button>`:`<button class="watch-primary" data-watch-request="${esc(key)}">ขอเข้าชมเกม</button>`}</div></article>`;
+ }).join('');
+ return `<style>.watch-wrap{display:grid;gap:18px}.watch-hero{padding:26px;border-radius:22px;background:linear-gradient(120deg,#111827,#253a59 58%,#4c3b66);color:white}.watch-hero h2{font-size:28px;margin:5px 0}.watch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:14px}.watch-card{background:var(--panel,#fff);border:1px solid var(--border,#e5e7eb);border-radius:18px;padding:18px;box-shadow:0 8px 25px #0f172a0a}.watch-card-head,.watch-card-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.watch-card h3{margin:16px 0 6px}.watch-card p{color:var(--muted,#64748b);font-size:13px}.watch-status{font-size:11px;padding:5px 9px;border-radius:20px;background:#e0f2fe;color:#075985}.watch-primary,.watch-pending,.watch-cancel{border:0;border-radius:11px;padding:10px 13px;font-weight:800;cursor:pointer}.watch-primary{background:#2563eb;color:#fff}.watch-pending{background:#fef3c7;color:#92400e}.watch-cancel{background:#fee2e2;color:#991b1b}.watch-empty{padding:32px;text-align:center;border:1px dashed var(--border,#cbd5e1);border-radius:18px;color:var(--muted,#64748b)}.watch-room{display:grid;gap:16px}.watch-room-hero{padding:20px;border-radius:20px;background:linear-gradient(120deg,#101827,#1e3a5f);color:#fff;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.watch-room-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.watch-player{padding:14px;border-radius:14px;background:var(--panel,#fff);border:1px solid var(--border,#e5e7eb)}.watch-board{display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:4px}.watch-ball{aspect-ratio:1;display:grid;place-items:center;border-radius:50%;font-size:clamp(8px,1.4vw,13px);background:#e2e8f0;color:#334155}.watch-ball.hit{background:#2563eb;color:#fff;font-weight:900}.watch-bingo-card{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin:10px 0}.watch-bingo-card span{display:grid;place-items:center;aspect-ratio:1;border-radius:5px;background:#e2e8f0;font-size:11px;font-weight:800}.watch-bingo-card span.selected{background:#2563eb;color:#fff}@media(max-width:600px){.watch-board{grid-template-columns:repeat(10,minmax(0,1fr))}}</style><div class="watch-wrap"><section class="watch-hero"><div style="letter-spacing:2px;font-size:11px;opacity:.7">GANG CONTROL / SPECTATOR LOUNGE</div><h2>ห้องรอสำหรับผู้ชม</h2><p>เลือกห้องเกมที่กำลังเปิดอยู่ แล้วส่งคำขอให้แอดมินอนุมัติก่อนเข้ารับชม</p><button class="watch-primary" id="watchRefresh">↻ อัปเดตห้อง</button></section><div class="watch-grid">${cards||'<div class="watch-empty">ยังไม่มีห้องเกมที่เปิดให้ขอเข้าชม</div>'}</div><section class="panel"><h3>คำขอของฉัน</h3>${reqs.length?reqs.slice(0,8).map(q=>`<div class="watch-player"><b>${esc(q.roomTitle||q.game)}</b><div>${labels[q.game]||q.game} · ${statusLabel[q.status]||q.status} · ${fmt(q.createdAt)}</div></div>`).join(''):'<p>ยังไม่มีคำขอเข้าชม</p>'}</section></div>`;
+}
+function spectatorRoom(){
+ const r=spectatorRoomData;if(!r)return `<div class="watch-room"><button class="watch-primary" id="watchBack">← กลับห้องรอ</button><div class="watch-empty">กำลังโหลดห้องรับชม...</div></div>`;
+ const players=r.players||[];
+ const playerCards=players.map(p=>`<div class="watch-player"><b>${esc(p.name)}</b><div style="font-size:12px;color:var(--muted,#64748b)">${r.game==='bingo'?`ทำเครื่องหมาย ${p.marked||0}/25`:r.game==='impostor'?`${p.clue?'คำใบ้: '+esc(p.clue):'รอคำใบ้'} · ${p.voted?'โหวตแล้ว':'ยังไม่โหวต'}${isAdmin()&&p.role?' · บทบาท '+esc(p.role):''}`:`${p.alive?'ยังอยู่ในเกม':'ออกจากเกม'} · ${p.voted?'โหวตแล้ว':'รอโหวต'}${isAdmin()&&p.role?' · บทบาท '+esc(p.role):''}`}</div></div>`).join('');
+ const content=r.game==='bingo'?`<section class="panel"><h3>กระดานเลขที่ออกแล้ว</h3><div class="watch-board">${Array.from({length:75},(_,i)=>i+1).map(n=>`<span class="watch-ball ${(r.drawn||[]).includes(n)?'hit':''}">${n}</span>`).join('')}</div><p>สุ่มแล้ว ${(r.drawn||[]).length}/75 · ผู้ชนะ ${(r.winners||[]).map(w=>esc(w.name)).join(', ')||'ยังไม่มี'}</p></section><section class="panel"><h3>บัตร BINGO ของผู้เล่น</h3><div class="watch-room-grid">${players.map(p=>`<div class="watch-player"><b>${esc(p.name)}</b><div class="watch-bingo-card">${(p.card||[]).map((n,i)=>`<span class="${p.markedCells?.[i]?'selected':''}">${n??'★'}</span>`).join('')}</div><small>ทำเครื่องหมาย ${p.marked||0}/25</small></div>`).join('')||'<p>ยังไม่มีผู้เล่น</p>'}</div></section>`:r.game==='impostor'?`<section class="panel"><h3>สถานะรอบเกม</h3><p>หมวด ${esc(r.categoryLabel||'เกมทายคำ')} · ระยะเกม ${esc(spectatorStatus(r.phase))}${isAdmin()&&r.word?' · คำลับ '+esc(r.word):''}</p></section>`:`<section class="panel"><h3>สถานะหมู่บ้าน</h3><p>วันที่ ${r.dayNumber||0} · ${esc(spectatorStatus(r.phase))} ${r.winner?'· จบเกมแล้ว':''}</p>${isAdmin()?`<div class="watch-room-grid">${players.map(p=>`<div class="watch-player">${esc(p.name)} · ${esc(p.role||'-')}</div>`).join('')}</div>`:''}</section>`;
+ return `<div class="watch-room"><section class="watch-room-hero"><div><div style="font-size:11px;opacity:.7;letter-spacing:2px">LIVE SPECTATOR ROOM · ${r.game.toUpperCase()}</div><h2 style="margin:5px 0">${esc(r.title)}</h2><div>เจ้าของ ${esc(r.hostName)} · ${esc(spectatorStatus(r.status))} · ${players.length} ผู้เล่น</div></div><button class="watch-primary" id="watchBack">← ออกจากห้องรับชม</button></section>${content}<section class="panel"><h3>ผู้เล่นในห้อง (${players.length})</h3><div class="watch-room-grid">${playerCards||'<p>ยังไม่มีผู้เล่น</p>'}</div></section><div style="text-align:center;color:var(--muted,#64748b);font-size:12px">อัปเดตอัตโนมัติ · โหมดผู้ชมเท่านั้น ไม่สามารถส่งคำสั่งในเกมได้</div></div>`;
+}
+async function enterSpectatorRoom(key){
+ spectatorRoomKey=key;spectatorRoomData=null;page='spectatorRoom';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===(isAdmin()?'spectator':'spectatorLobby')));render();
+ try{await loadSpectatorRoom()}catch(e){toast(e.message);page='spectatorLobby';render()}
+}
 function spectator(){
  if(!isAdmin())return '<div class="panel">ไม่มีสิทธิ์เข้าถึงหน้านี้</div>';
  const data=gameSpectatorData,rooms=data?.rooms||[],selected=rooms.find(r=>r.game+':'+r.id===gameSpectatorSelected);
@@ -293,7 +346,7 @@ function spectator(){
   `<div class="gs-player-list">${players.map(p=>`<div class="gs-player"><b>${esc(p.name)}</b><small>${selected.game==='impostor'?`บทบาท: ${esc(p.role)} · ${p.alive?'ยังอยู่':'ออกจากเกม'}${p.clue?' · คำใบ้: '+esc(p.clue):''}`:`บทบาท: ${esc(p.role)} · ${p.alive?'ยังมีชีวิต':'ออกจากเกม'}${p.left?' · ออกจากห้อง':''}`}</small></div>`).join('')||'<div class="gs-muted">ยังไม่มีผู้เล่น</div>'}</div>${selected.game==='impostor'?`<p class="gs-muted">หมวด ${esc(selected.category||'-')} · คำลับ ${selected.word?esc(selected.word):'ยังไม่เริ่มสุ่มคำ'} · ผล ${esc(selected.resultText||'-')}</p>`:`<p class="gs-muted">วันที่ ${selected.dayNumber||0} · ผล ${esc(selected.resultText||'-')}</p>`}`}
   </section>`;
  }
- return `${style}<div class="gs-wrap"><section class="gs-hero"><div><div class="gs-muted" style="color:#b7c9dc;letter-spacing:2px">GANG CONTROL / ADMIN ONLY</div><h2>ศูนย์ผู้ชมเกม</h2><div style="color:#d2deeb">ดูภาพรวมทุกห้องได้ทันทีตั้งแต่สร้างห้อง ไม่ต้องรอเริ่มเกม · โหมดอ่านอย่างเดียว ไม่รบกวนผู้เล่น</div></div><button class="gs-btn" id="gsRefresh">↻ รีเฟรชข้อมูล</button></section><div class="gs-stats"><div class="gs-stat"><span class="gs-muted">ห้องทั้งหมด</span><b>${data?.summary?.total??'—'}</b></div><div class="gs-stat"><span class="gs-muted">ห้องรอผู้เล่น</span><b>${data?.summary?.waiting??'—'}</b></div><div class="gs-stat"><span class="gs-muted">กำลังเล่น</span><b>${data?.summary?.playing??'—'}</b></div><div class="gs-stat"><span class="gs-muted">จบเกมแล้ว</span><b>${data?.summary?.finished??'—'}</b></div></div>${detail}<section><div class="panel-head"><div><h3>ห้องเกมทั้งหมด</h3><div class="gs-muted">ห้องที่เพิ่งสร้างจะแสดงทันที แม้อยู่ในสถานะห้องรอ</div></div></div><div class="gs-grid">${cards||'<div class="gs-empty">ยังไม่มีห้องเกมที่เปิดอยู่</div>'}</div></section></div>`;
+ return `${style}<div class="gs-wrap"><section class="gs-hero"><div><div class="gs-muted" style="color:#b7c9dc;letter-spacing:2px">GANG CONTROL / ADMIN ONLY</div><h2>ศูนย์ผู้ชมเกม</h2><div style="color:#d2deeb">ดูภาพรวมทุกห้องได้ทันทีตั้งแต่สร้างห้อง ไม่ต้องรอเริ่มเกม · โหมดอ่านอย่างเดียว ไม่รบกวนผู้เล่น</div></div><button class="gs-btn" id="gsRefresh">↻ รีเฟรชข้อมูล</button></section><div class="gs-stats"><div class="gs-stat"><span class="gs-muted">ห้องทั้งหมด</span><b>${data?.summary?.total??'—'}</b></div><div class="gs-stat"><span class="gs-muted">ห้องรอผู้เล่น</span><b>${data?.summary?.waiting??'—'}</b></div><div class="gs-stat"><span class="gs-muted">กำลังเล่น</span><b>${data?.summary?.playing??'—'}</b></div><div class="gs-stat"><span class="gs-muted">จบเกมแล้ว</span><b>${data?.summary?.finished??'—'}</b></div></div>${detail}<section class="gs-card"><div class="panel-head"><div><h3>คำขอเข้าชมจากสมาชิก</h3><div class="gs-muted">อนุมัติแล้วสมาชิกจะเข้าไปยังหน้าห้องรับชมแยกต่างหาก</div></div><button class="gs-btn alt" id="gsReqRefresh">↻ อัปเดต</button></div><div id="gsRequestsList" class="gs-player-list">กำลังโหลดคำขอ...</div></section><section><div class="panel-head"><div><h3>ห้องเกมทั้งหมด</h3><div class="gs-muted">ห้องที่เพิ่งสร้างจะแสดงทันที แม้อยู่ในสถานะห้องรอ</div></div></div><div class="gs-grid">${cards||'<div class="gs-empty">ยังไม่มีห้องเกมที่เปิดอยู่</div>'}</div></section></div>`;
 }
 
 function dashboard(){
@@ -949,8 +1002,14 @@ async function loadBingo(roomId,forceLobby=false){
 async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.stringify(body)});await loadBingo(bingoState?.room?.id)}
 
 function wire(){
+ $('#watchRefresh')?.addEventListener('click',()=>loadSpectatorLobby().catch(e=>toast(e.message)));
+ document.querySelectorAll('[data-watch-request]').forEach(b=>b.addEventListener('click',async()=>{if(spectatorRequestBusy)return;spectatorRequestBusy=true;b.disabled=true;try{const [game,roomId]=b.dataset.watchRequest.split(':');await api('/api/spectator/requests',{method:'POST',body:JSON.stringify({game,roomId})});await loadSpectatorLobby();toast('ส่งคำขอเข้าชมแล้ว รอแอดมินอนุมัติ')}catch(e){toast(e.message)}finally{spectatorRequestBusy=false}}));
+ document.querySelectorAll('[data-watch-enter]').forEach(b=>b.addEventListener('click',()=>enterSpectatorRoom(b.dataset.watchEnter)));
+ document.querySelectorAll('[data-watch-cancel]').forEach(b=>b.addEventListener('click',async()=>{try{await api(`/api/spectator/requests/${encodeURIComponent(b.dataset.watchCancel)}`,{method:'DELETE'});await loadSpectatorLobby();toast('ยกเลิกคำขอแล้ว')}catch(e){toast(e.message)}}));
+ $('#watchBack')?.addEventListener('click',()=>{page=isAdmin()?'spectator':'spectatorLobby';spectatorRoomData=null;if(isAdmin())loadGameSpectator().catch(e=>toast(e.message));else loadSpectatorLobby().catch(e=>toast(e.message));render()});
+ $('#gsReqRefresh')?.addEventListener('click',()=>loadSpectatorAdminRequests().catch(e=>toast(e.message)));
  $('#gsRefresh')?.addEventListener('click',async e=>{const b=e.currentTarget;if(b.disabled)return;b.disabled=true;try{await loadGameSpectator()}catch(err){toast(err.message)}finally{b.disabled=false}});
- document.querySelectorAll('[data-gs-open]').forEach(b=>b.addEventListener('click',()=>{gameSpectatorSelected=b.dataset.gsOpen;render()}));
+ document.querySelectorAll('[data-gs-open]').forEach(b=>b.addEventListener('click',()=>enterSpectatorRoom(b.dataset.gsOpen)));
  $('#gsClose')?.addEventListener('click',()=>{gameSpectatorSelected=null;render()});
 
  if(page==='bingo'){
