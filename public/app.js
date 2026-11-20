@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false;
-let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfAutoCallBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
+let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
 const pageNames = { dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
@@ -140,6 +140,44 @@ function installWerewolfDeathEffects(){
  @media(prefers-reduced-motion:reduce){#wwDeathFx *,#wwDeathFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
  `;document.head.appendChild(st);
 }
+function installWerewolfSkillEffects(){
+ if(document.getElementById('wwSkillFxStyles'))return;
+ const st=document.createElement('style');st.id='wwSkillFxStyles';st.textContent=`
+ #wwSkillFx{--skill:#a78bfa;position:fixed;inset:0;z-index:29999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at center,#111827a8 0%,#030712e8 72%);color:#fff;pointer-events:none;font-family:inherit;animation:wwSkillFade .35s ease-out both}
+ #wwSkillFx.protect{--skill:#5eead4;background:radial-gradient(ellipse at center,#062b31bb 0%,#030712e8 72%)}
+ #wwSkillFx *{box-sizing:border-box}
+ #wwSkillFx [hidden]{display:none!important}
+ #wwSkillFx .wwskill-card{width:min(92vw,760px);text-align:center;position:relative;z-index:1;padding:22px 18px}
+ #wwSkillFx .wwskill-visual{height:min(54vh,460px);display:grid;place-items:center;position:relative}
+ #wwSkillFx .wwskill-visual img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 30px color-mix(in srgb,var(--skill) 65%,transparent));animation:wwSkillMotion 2.8s ease-in-out both}
+ #wwSkillFx .wwskill-fallback{font-size:clamp(100px,22vw,210px);line-height:1;filter:drop-shadow(0 0 35px var(--skill));animation:wwSkillMotion 2.8s ease-in-out both}
+ #wwSkillFx .wwskill-kicker{font-size:11px;letter-spacing:4px;font-weight:1000;color:var(--skill);margin:5px 0 10px}
+ #wwSkillFx h2{font-size:clamp(27px,5vw,48px);line-height:1.1;margin:0 0 9px;text-shadow:0 4px 18px #000}
+ #wwSkillFx p{color:#dbe4ee;margin:0;font-size:14px}
+ #wwSkillFx .wwskill-ring{position:absolute;width:min(65vw,380px);aspect-ratio:1;border:2px solid color-mix(in srgb,var(--skill) 75%,transparent);border-radius:50%;box-shadow:0 0 45px color-mix(in srgb,var(--skill) 45%,transparent),inset 0 0 45px color-mix(in srgb,var(--skill) 20%,transparent);animation:wwSkillRing 2.8s ease-out both}
+ #wwSkillFx .wwskill-close{position:absolute;right:18px;top:18px;pointer-events:auto;border:1px solid #ffffff55;border-radius:99px;background:#080b10bb;color:#fff;padding:9px 14px;cursor:pointer;font-weight:800}
+ @keyframes wwSkillFade{from{opacity:0}to{opacity:1}}
+ @keyframes wwSkillMotion{0%{opacity:0;transform:translateY(55px) scale(.45) rotate(-8deg)}35%{opacity:1;transform:translateY(-8px) scale(1.08) rotate(3deg)}55%{transform:translateY(0) scale(.98) rotate(-2deg)}100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+ @keyframes wwSkillRing{0%{opacity:0;transform:scale(.25)}45%{opacity:.9;transform:scale(1.05)}100%{opacity:.25;transform:scale(1.35)}}
+ @media(prefers-reduced-motion:reduce){#wwSkillFx *,#wwSkillFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+ `;document.head.appendChild(st);
+}
+function showWerewolfSkillEffect(kind,targetName=''){
+ const configs={
+  seer:{className:'seer',icon:'🔮',asset:'/assets/death-fx/seer-inspect.gif',kicker:'ORACLE VISION · TRUTH REVEALED',title:'ญาณหยั่งรู้ถูกปลุกขึ้น',desc:'ม่านเวทมนตร์เปิดเผยความจริงของผู้เล่นที่คุณเลือก'},
+  protect:{className:'protect',icon:'🛡️',asset:'/assets/death-fx/bodyguard-protect.gif',kicker:'GUARDIAN AEGIS · PROTECTION CAST',title:'กำแพงพิทักษ์ถูกกางออก',desc:'พลังป้องกันโอบล้อมเป้าหมาย ปกป้องจากอันตรายในค่ำคืนนี้'}
+ };
+ const cfg=configs[kind];if(!cfg)return;
+ document.getElementById('wwSkillFx')?.remove();
+ const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
+ const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
+ el.innerHTML=`<button class="wwskill-close" type="button">ข้ามฉาก ×</button><div class="wwskill-card"><div class="wwskill-visual"><div class="wwskill-ring"></div><img src="${cfg.asset}" alt="" draggable="false"><span class="wwskill-fallback" hidden>${cfg.icon}</span></div><div class="wwskill-kicker">${cfg.kicker}</div><h2>${cfg.title}</h2><p>${cfg.desc}</p>${target}</div>`;
+ document.body.appendChild(el);
+ const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
+ img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
+ const close=()=>el.remove();const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+}
+
 function showWerewolfDeathEffect(event,roomId){
  if(!event?.id||!['wolf','poison','vote','assassin','hunter','bodyguard'].includes(event.cause))return;
  const key=`gcWWDeathShown:${roomId}:${event.id}`;
@@ -247,7 +285,7 @@ function isAdmin(){return !!state?.isAdmin}
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await boot()}catch(err){$('#loginError').textContent=err.message}});
 $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});state=null;$('#appView').classList.add('hidden');$('#loginView').classList.remove('hidden')};
 
-async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
+async function boot(){const me=await api('/api/me');if(!me.user){$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');return}$('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');installGCSoundUI();installReportsNav();installWheelStyles();installImpostorStyles();installWerewolfStyles();installWerewolfDeathEffects();installWerewolfSkillEffects();$('#userName').textContent=me.user.name;$('#userRole').textContent=me.isAdmin?'ผู้ดูแลระบบ':'สมาชิกแก๊ง';$('#userAvatar').textContent=(me.user.name||'G').slice(0,1).toUpperCase();document.querySelectorAll('.nav-item').forEach(b=>{const adminPages=['dashboard','wheel','audit','members','inventory','history'];b.classList.toggle('hidden',!me.isAdmin&&adminPages.includes(b.dataset.page))});if(!me.isAdmin){page='bingo';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page==='bingo'))}await refresh();await loadBingo().catch(e=>toast(e.message))}
 
 async function refresh(){state=await api('/api/data?date='+encodeURIComponent(selectedDate));$('#todayChip').textContent=state.today;$('#requestBadge')?.closest('.nav-item')?.remove();$('#deliveryBadge').textContent=state.summary.pendingDeliveries;$('#attendanceBadge').textContent='3 รอบ';render()}
 
@@ -672,98 +710,6 @@ document.querySelectorAll('[data-im-join]').forEach(b=>b.onclick=async()=>{try{a
 }
 
 
-const WW_VOICE_STORAGE_KEY='gcWerewolfModeratorVoice';
-function wwVoiceIsEnabled(){return true}
-let wwVoiceUnlocked=false;
-function wwUnlockModeratorVoice(){
- if(wwVoiceUnlocked||!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return;
- wwVoiceUnlocked=true;
- try{const u=new SpeechSynthesisUtterance(' ');u.lang='th-TH';u.volume=0;window.speechSynthesis.speak(u);setTimeout(()=>wwSpeakCurrentStage(),120);}catch(_){ }
-}
-// Browsers require a user gesture before autoplaying speech. Unlock silently on the first interaction.
-if(!window.__wwVoiceUnlockBound){window.__wwVoiceUnlockBound=true;document.addEventListener('pointerdown',wwUnlockModeratorVoice,{capture:true,once:true});document.addEventListener('keydown',wwUnlockModeratorVoice,{capture:true,once:true});}
-let wwSpeechQueue=[],wwSpeechActive=false,wwSpeechRunId=0,wwSpeechStartedRun=0;
-function wwPickThaiVoice(){
- if(!('speechSynthesis' in window))return null;
- const voices=window.speechSynthesis.getVoices()||[];
- const thai=voices.filter(v=>/^th([_-]|$)/i.test(v.lang||''));
- if(!thai.length)return null;
- // Prefer a locally installed Thai voice for lower latency and fewer robotic pauses.
- const score=v=>{
-  const n=(v.name||'').toLowerCase();let points=0;
-  if(v.localService)points+=5;
-  if(/google|microsoft|natural|neural|premium/i.test(n))points+=3;
-  if(/thailand|thai/i.test(n))points+=2;
-  if(/compact|legacy/i.test(n))points-=2;
-  return points;
- };
- return thai.sort((a,b)=>score(b)-score(a))[0];
-}
-function wwModeratorSpeak(text){
- if(!text||!wwVoiceIsEnabled()||!('speechSynthesis' in window)||!('SpeechSynthesisUtterance' in window))return false;
- try{
-  const synth=window.speechSynthesis;
-  const runId=++wwSpeechRunId;
-  synth.cancel();wwSpeechQueue=[];wwSpeechActive=true;
-  // Gentle pauses improve Thai narration without chopping the voice into robotic fragments.
-  const spoken=String(text).replace(/\s+/g,' ').replace(/([.!?])\s*/g,'$1 ').replace(/(ครับ|ค่ะ|นะครับ|นะคะ)\s*/g,'$1  ');
-  const utterance=new SpeechSynthesisUtterance(spoken);
-  utterance.lang='th-TH';utterance.rate=0.92;utterance.pitch=1.0;utterance.volume=1;
-  const voice=wwPickThaiVoice();if(voice)utterance.voice=voice;
-  utterance.onend=()=>{if(runId===wwSpeechRunId)wwSpeechActive=false};
-  utterance.onerror=()=>{if(runId===wwSpeechRunId)wwSpeechActive=false};
-  synth.speak(utterance);
-  return true;
- }catch(_){wwSpeechQueue=[];wwSpeechActive=false;return false}
-}
-function wwRoleAnnouncement(role){
- const lines={
-  wolf:'หมาป่าทุกตัว ลืมตาขึ้นครับ เลือกผู้เล่นหนึ่งคนที่จะเป็นเหยื่อคืนนี้ เมื่อเลือกครบแล้ว กรุณาหลับตา',
-  seer:'ผู้หยั่งรู้ ลืมตาขึ้นครับ เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบว่าเป็นฝ่ายใด เมื่อทราบผลแล้ว กรุณาหลับตา',
-  detective:'นักสืบ ลืมตาขึ้นครับ เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบ เมื่อทำรายการเสร็จแล้ว กรุณาหลับตา',
-  witch:'แม่มด ลืมตาขึ้นครับ พิจารณาใช้ยาช่วยชีวิตหรือยาพิษ หากไม่ต้องการใช้ยาให้เลือกข้าม เมื่อเสร็จแล้วกรุณาหลับตา',
-  bodyguard:'บอดี้การ์ด ลืมตาขึ้นครับ เลือกผู้เล่นหนึ่งคนเพื่อคุ้มกัน เมื่อเลือกแล้วกรุณาหลับตา',
-  guardian:'ผู้พิทักษ์ ลืมตาขึ้นครับ เลือกผู้เล่นหนึ่งคนเพื่อปกป้อง เมื่อเลือกแล้วกรุณาหลับตา',
-  priest:'นักบวช ลืมตาขึ้นครับ เลือกผู้เล่นที่ต้องการปกป้อง หรือข้ามการใช้พร หากใช้สิทธิ์ไปแล้วให้ข้ามได้เลย',
-  medium:'คนทรง ลืมตาขึ้นครับ หากมีผู้เสียชีวิตและยังมีสิทธิ์ เลือกตรวจสอบบทบาท หรือเลือกข้าม แล้วหลับตา',
-  assassin:'นักฆ่า ลืมตาขึ้นครับ หากต้องการใช้สิทธิ์ เลือกเป้าหมายหนึ่งคน หรือเลือกข้าม แล้วหลับตา'
- };
- return lines[role]||'';
-}
-function wwNarrateWerewolf(oldRoom, room){
- if(!room||!wwVoiceIsEnabled())return;
- const old=oldRoom&&String(oldRoom.id)===String(room.id)?oldRoom:null;
- const phaseChanged=!old||old.phase!==room.phase;
- const roleChanged=room.phase==='night'&&room.nightCallRole&&(!old||old.nightCallRole!==room.nightCallRole);
- const lines=[];
- if(phaseChanged){
-  if(room.phase==='night'){
-   if(old?.phase==='vote'&&room.lastVote?.name)lines.push(`ผลลงคะแนน ผู้เล่น ${room.lastVote.name} ถูกโหวตออก`);
-   lines.push('ทุกคนหลับตาครับ เข้าสู่เวลากลางคืน');
-  }else if(room.phase==='day'){
-   const dead=room.lastNight?.killed||[];
-   lines.push(dead.length?`พระอาทิตย์ขึ้นแล้วครับ ทุกคนตื่นได้ เมื่อคืน ${dead.join(' และ ')} ถูกกำจัด ขอให้ทุกคนเริ่มอภิปราย`:'พระอาทิตย์ขึ้นแล้วครับ ทุกคนตื่นได้ คืนนี้ไม่มีผู้เสียชีวิต ขอให้ทุกคนเริ่มอภิปราย');
-  }else if(room.phase==='vote')lines.push('หมดเวลาอภิปรายแล้วครับ เข้าสู่ช่วงลงคะแนน ทุกคนเลือกผู้เล่นที่สงสัยได้หนึ่งคน');
-  else if(room.phase==='hunter_shot')lines.push(`นายพรานครับ ถึงเวลาลั่นไกครั้งสุดท้าย ${room.pendingHunterName||''} เลือกเป้าหมายหนึ่งคนได้เลย`);
-  else if(room.phase==='finished'){
-   const winner=room.winner==='wolf'?'ฝ่ายหมาป่า':room.winner==='village'?'ฝ่ายชาวบ้าน':room.winner==='jester'?'ตัวตลก':'นักฆ่า';
-   lines.push(`เกมจบแล้วครับ ${winner} เป็นผู้ชนะ ขอแสดงความยินดีด้วยครับ`);
-  }
- }
- if(roleChanged){const announcement=wwRoleAnnouncement(room.nightCallRole);if(announcement)lines.push(announcement);}
- if(lines.length)wwModeratorSpeak(lines.join(' '));
-}
-function wwSpeakCurrentStage(){
- const room=werewolfState?.room;if(!room)return;
- let line='';
- if(room.phase==='night')line=['ทุกคนหลับตาครับ เข้าสู่เวลากลางคืน',wwRoleAnnouncement(room.nightCallRole)].filter(Boolean).join(' ');
- else if(room.phase==='day')line='พระอาทิตย์ขึ้นแล้วครับ ทุกคนตื่นได้ ขอให้เริ่มอภิปราย';
- else if(room.phase==='vote')line='เข้าสู่ช่วงลงคะแนน ทุกคนเลือกผู้เล่นที่สงสัยได้หนึ่งคน';
- else if(room.phase==='hunter_shot')line=`นายพรานครับ ${room.pendingHunterName||''} เลือกเป้าหมายหนึ่งคนได้เลย`;
- else if(room.phase==='finished')line=room.winner==='wolf'?'เกมจบแล้วครับ ฝ่ายหมาป่าเป็นผู้ชนะ':room.winner==='village'?'เกมจบแล้วครับ ฝ่ายชาวบ้านเป็นผู้ชนะ':room.winner==='jester'?'เกมจบแล้วครับ ตัวตลกเป็นผู้ชนะ':'เกมจบแล้วครับ นักฆ่าเป็นผู้ชนะ';
- if(line)wwModeratorSpeak(line);
-}
-
 async function loadWerewolf(roomId, forceLobby=false){
  if(forceLobby){werewolfForceLobby=true;localStorage.removeItem('gcWerewolfRoom');roomId='';}
  else if(werewolfForceLobby){roomId='';}
@@ -787,7 +733,6 @@ async function loadWerewolf(roomId, forceLobby=false){
     GCSound.play(now.winner==='jester'&&won?'jester':won?(now.winner==='village'?'winVillage':'winWolf'):'lose');
    }
   }
-  if(old.nightCallRole!==now.nightCallRole&&now.nightCallRole)GCSound.play('bell');
   const oldNight=JSON.stringify(old.lastNight||null),newNight=JSON.stringify(now.lastNight||null);
   if(newNight!==oldNight&&now.lastNight){
    if((now.lastNight.killed||[]).length)GCSound.play('kill');
@@ -806,17 +751,7 @@ async function loadWerewolf(roomId, forceLobby=false){
   const previousId=old?.me?.deathEvent?.id;
   if(previousId!==now.me.deathEvent.id)showWerewolfDeathEffect(now.me.deathEvent,now.id);
  }
- wwNarrateWerewolf(old,now);
  werewolfState=next;
- // The host client advances the night script automatically once every living member
- // of the currently called role has submitted an action. The server remains authoritative.
- if(now?.isHost&&now.phase==='night'&&now.nextNightRole&&now.nextNightRole!==now.nightCallRole&&!werewolfAutoCallBusy){
-  werewolfAutoCallBusy=true;
-  api(`/api/werewolf/${encodeURIComponent(now.id)}/night-call`,{method:'POST',body:'{}'})
-   .then(()=>loadWerewolf(now.id))
-   .catch(()=>{})
-   .finally(()=>{werewolfAutoCallBusy=false;});
- }
  if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
  if(!next?.room&&roomId)localStorage.removeItem('gcWerewolfRoom');
  if(page==='werewolf'&&before!==JSON.stringify(next))render();
@@ -831,9 +766,6 @@ function werewolf(){
  if(!r)return `<section class="ww-shell">${header}<div class="ww-body"><div class="ww-grid"><section class="ww-panel"><div class="ww-kicker">CREATE YOUR VILLAGE</div><h3 style="font-size:22px">เปิดหมู่บ้านใหม่</h3><p class="ww-muted">รองรับ 4–16 คน · สุ่มบทบาทอัตโนมัติ · เล่นพร้อมกันแบบเรียลไทม์</p><div class="ww-field" style="margin:14px 0"><label>ชื่อห้อง</label><input id="wwTitle" maxlength="50" value="หมู่บ้านรัตติกาล"></div><button class="ww-btn" id="wwCreate">＋ สร้างห้องใหม่</button></section><section class="ww-panel"><div class="ww-kicker">HOW TO PLAY</div>${rules}</section></div><section class="ww-panel"><h3>เข้าร่วมด้วยรหัสห้อง</h3><div class="ww-muted">กรอกรหัส 6 หลักจากเจ้าของห้อง</div><div style="display:flex;gap:8px;margin-top:12px"><input id="wwJoinCode" inputmode="numeric" maxlength="6" placeholder="รหัสห้อง 6 หลัก" style="min-width:0;flex:1;border:1px solid #4a5a70;background:#101824;color:#fff;border-radius:9px;padding:11px"><button class="ww-btn" id="wwJoinCodeBtn">เข้าร่วม</button></div></section><section class="ww-panel"><div class="ww-room"><div><h3>หมู่บ้านที่เปิดอยู่</h3><div class="ww-muted">เลือกห้องที่ยังรอผู้เล่น</div></div><button class="ww-btn ghost" id="wwRefresh">↻ รีเฟรช</button></div><div style="display:grid;gap:9px;margin-top:13px">${rooms.map(x=>`<div class="ww-lobby-card"><div><b>${esc(x.title)}</b><div class="ww-muted">เจ้าของ ${esc(x.hostName)} · ${x.playerCount}/16 คน</div><div class="ww-code" style="font-size:14px">${esc(x.code)}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${werewolfState?.isAdmin?`<button class="ww-btn red" data-ww-delete="${esc(x.id)}">ลบห้อง</button>`:''}<button class="ww-btn" data-ww-join="${esc(x.id)}">เข้าร่วมห้อง</button></div></div>`).join('')||'<div class="ww-muted" style="padding:20px;text-align:center">ยังไม่มีหมู่บ้านที่เปิดอยู่</div>'}</div></section></div></section>`;
  const playerCards=players.map(x=>`<div class="ww-player ${x.alive?'':'ww-dead'}"><b>${esc(x.name)} ${String(x.userId)===String(r.hostId)?'👑':''}</b><small>${x.left?'↗ ออกจากเกม':x.alive?'● ยังมีชีวิต':'✕ ถูกกำจัด'}${x.role?' · '+esc(x.role):x.isWolfMate?' · 🐺 หมาป่าทีมเดียวกัน':''}${phase==='night'&&x.nightSubmitted?' · ส่งคำสั่งแล้ว':''}${phase==='vote'&&x.voted?' · โหวตแล้ว':''}</small></div>`).join('');
  const alive=players.filter(x=>x.alive);
- const myNightRole=['wolf','alpha'].includes(p?.role)?'wolf':p?.role;
- const nightTurnActive=phase==='night'&&!!p?.alive&&!!r?.nightCallRole&&r.nightCallRole===myNightRole&&!p?.nightSubmitted;
- const nightCurtain=phase==='night'&&!nightTurnActive;
  const roleGuides={
    wolf:['🐺 หมาป่า','ฝ่ายหมาป่า','กำจัดชาวบ้านให้จำนวนหมาป่าเท่ากับหรือมากกว่าฝ่ายอื่น','ร่วมเลือกเหยื่อกับหมาป่าตัวอื่นทุกคืน','เลือกผู้เล่นที่ไม่ใช่หมาป่า 1 คน ระบบนับเสียงหมาป่าทั้งหมด','สังเกตคำพูดของคนอื่นและอย่าเปิดเผยตัว'],
    alpha:['🐺 หมาป่าอัลฟ่า','ฝ่ายหมาป่า','ชนะพร้อมทีมหมาป่า','เลือกเหยื่อกลางคืนร่วมกับหมาป่าทั่วไป','เลือกเป้าหมายที่ไม่ใช่หมาป่าเหมือนหมาป่าทั่วไป','เวอร์ชันนี้ไม่มีสกิลแยกจากหมาป่าทั่วไป แต่ถูกนับเป็นหมาป่า'],
@@ -891,11 +823,8 @@ function werewolf(){
 <label class="ww-role-option" style="opacity:.8"><input type="checkbox" checked disabled><span><b>🏡 ชาวบ้าน</b><small>เติมจำนวนผู้เล่นที่เหลืออัตโนมัติ</small></span></label></div><div class="ww-muted" id="wwRolePreview">ผู้เล่น ${players.length} คน · หมาป่า ${Math.max(1,Math.floor(players.length/4))} ตัว · บทบาทพิเศษตามที่เลือก · ชาวบ้านจะเติมจำนวนที่เหลือ (ต้องเหลือชาวบ้านอย่างน้อย 1 คน)</div><button class="ww-btn ghost" id="wwSaveRoles" style="margin-top:10px">บันทึกการตั้งค่าบทบาท</button></div>`:''}<div style="border-top:1px solid #3a485a;margin-top:14px;padding-top:14px"><h3>ผู้เล่นในหมู่บ้าน · ${players.length}/16</h3><div class="ww-players">${playerCards}</div></div><div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">${r.isHost?`<button class="ww-btn" id="wwStart" ${players.length<4?'disabled':''}>🌕 เริ่มเกมและสุ่มบทบาท</button>`:''}</div></div>`;
  if(phase==='night'){
   let action='';
-  const calledForMe=nightTurnActive;
-  const moderatorPanel=`<div class="ww-notice" style="margin:12px 0;border-color:#c6a879;background:#332b22"><b>🎙️ Moderator Bot · ผู้ดำเนินเกมอัตโนมัติ</b><div style="margin-top:6px">${r.nightCallLabel?`กำลังดำเนินบทบาท: <b>${esc(r.nightCallLabel)}</b>`:'บอทกำลังเตรียมเรียกบทบาทแรก'}</div><div class="ww-muted" style="margin-top:4px">${r.nextNightCallLabel?`บทบาทถัดไป: ${esc(r.nextNightCallLabel)}`:'ดำเนินบทบาทกลางคืนครบแล้ว'}</div><div class="ww-muted" style="margin-top:5px">เมื่อผู้เล่นบทบาทปัจจุบันส่งคำสั่งครบ บอทจะเรียกบทบาทถัดไปให้อัตโนมัติ</div></div>`;
   if(!p?.alive)action='<div class="ww-notice">คุณถูกกำจัดแล้ว สามารถเฝ้าดูเกมต่อได้</div>';
-  else if(p.nightSubmitted)action='<div class="ww-notice">ส่งคำสั่งกลางคืนแล้ว 🌙 รอ Moderator เรียกบทบาทถัดไป</div>';
-  else if(!calledForMe)action=`<div class="ww-notice">🔒 ยังใช้สกิลไม่ได้ — รอ Moderator เรียก${esc(({'wolf':'หมาป่า','alpha':'หมาป่า','seer':'ผู้หยั่งรู้','detective':'นักสืบ','witch':'แม่มด','bodyguard':'บอดี้การ์ด','guardian':'ผู้พิทักษ์','priest':'นักบวช','medium':'คนทรง','assassin':'นักฆ่า'})[p?.role]||'บทบาทของคุณ')}ก่อน</div>`;
+  else if(p.nightSubmitted)action='<div class="ww-notice">ส่งคำสั่งกลางคืนแล้ว 🌙 รอผู้เล่นที่มีบทบาทอื่นดำเนินการ</div>';
   else if(['wolf','alpha'].includes(p.role))action=`<div class="ww-muted">เลือกเหยื่อหนึ่งคน หมาป่าทุกตัวต้องเลือก ระบบจะใช้เสียงข้างมาก</div><div class="ww-action-grid">${alive.filter(x=>!x.isWolfMate).map(x=>`<button class="ww-action" data-ww-night="kill" data-target="${esc(x.userId)}"><b>🐺 ${esc(x.name)}</b><small>เลือกเป็นเหยื่อคืนนี้</small></button>`).join('')}</div>`;
   else if(['seer','detective'].includes(p.role))action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบผลจะเห็นเฉพาะคุณ</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="inspect" data-target="${esc(x.userId)}"><b>🔮 ${esc(x.name)}</b><small>ตรวจสอบฝ่าย</small></button>`).join('')}</div>`;
   else if(p.role==='bodyguard'||p.role==='guardian')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อปกป้องคืนนี้</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="protect" data-target="${esc(x.userId)}"><b>${p.role==='bodyguard'?'🛡️':'✨'} ${esc(x.name)}</b><small>ปกป้องผู้เล่นคนนี้</small></button>`).join('')}</div>`;
@@ -904,14 +833,13 @@ function werewolf(){
   else if(p.role==='assassin')action=`<div class="ww-muted">นักฆ่ากำจัดผู้เล่นหนึ่งคนได้ 1 ครั้ง หากเป้าหมายถูกกำจัด คุณชนะทันที</div><div class="ww-action-grid">${p.assassinUsed?'<div class="ww-notice">ใช้ความสามารถไปแล้ว</div>':alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="assassin_kill" data-target="${esc(x.userId)}"><b>🗡️ ${esc(x.name)}</b><small>ลอบสังหาร</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามคืนนี้</b></button></div>`;
   else if(p.role==='witch')action=`<div class="ww-muted">เลือกใช้ยาอย่างใดอย่างหนึ่ง หรือข้ามคืนนี้ · ยาแต่ละชนิดใช้ได้ครั้งเดียว</div><div class="ww-action-grid">${p.witchSaveUsed?'':`<button class="ww-action" data-ww-night="save" data-target="${esc(r.witchAttackTarget||'')}"><b>💚 ใช้ยาช่วยชีวิต</b><small>${r.witchAttackTarget?'ช่วยเหยื่อที่หมาป่าเลือก':'รอหมาป่าเลือกเหยื่อก่อน'}</small></button>`}${p.witchPoisonUsed?'':alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="poison" data-target="${esc(x.userId)}"><b>☠️ วางยาพิษ · ${esc(x.name)}</b><small>กำจัดผู้เล่นคนนี้</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ไม่ใช้ยา</b><small>ผ่านคืนนี้</small></button></div>`;
   else action='<div class="ww-notice">ชาวบ้านไม่มีคำสั่งในเวลากลางคืน รอให้รุ่งเช้า</div>';
-  stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌙</span><div><strong>กลางคืน · ทุกคนหลับตา</strong><div class="ww-muted">Moderator จะเรียกทีละบทบาท เมื่อถูกเรียกเท่านั้นจึงจะใช้สกิลได้</div></div></div>${moderatorPanel}<div style="margin-top:14px"><h3>คำสั่งของคุณ</h3>${action}</div><div class="ww-muted" style="margin-top:12px">ผู้เล่นที่ส่งคำสั่งแล้ว: ${players.filter(x=>x.alive&&x.nightSubmitted).length}/${players.filter(x=>x.alive&&['wolf','alpha','seer','detective','witch','bodyguard','guardian','priest','medium','assassin'].includes(x.role)).length} คน</div></div>`;
+  stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌙</span><div><strong>กลางคืน · ทุกคนหลับตา</strong><div class="ww-muted">บทบาทพิเศษกำลังทำภารกิจอย่างลับ ๆ</div></div></div><div style="margin-top:14px"><h3>คำสั่งของคุณ</h3>${action}</div><div class="ww-muted" style="margin-top:12px">ผู้เล่นที่ส่งคำสั่ง: ${players.filter(x=>x.alive&&x.nightSubmitted).length}/${players.filter(x=>x.alive&&['wolf','alpha','seer','detective','witch','bodyguard','guardian','priest','medium','assassin'].includes(x.role)).length} บทบาท</div></div>`;
  }
  if(phase==='day')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🌅</span><div><strong>รุ่งเช้า · วันที่ ${r.dayNumber}</strong><div class="ww-muted">ทุกคนตื่นขึ้นมาและอภิปรายว่าใครน่าสงสัย</div></div></div>${r.lastNight?.killed?.length?`<div class="ww-notice" style="margin-top:12px">เมื่อคืนมีผู้เสียชีวิต: <b>${r.lastNight.killed.map(esc).join(', ')}</b>${r.lastNight.saved?' · มีคนได้รับการช่วยชีวิต':''}</div>`:`<div class="ww-notice" style="margin-top:12px">เมื่อคืนไม่มีผู้เสียชีวิต</div>`}${r.lastVote?`<div class="ww-notice" style="margin-top:8px">${r.lastVote.name?`ผลโหวต: <b>${esc(r.lastVote.name)}</b> ถูกกำจัด · บทบาท ${esc(r.lastVote.role)}`:'ผลโหวตเสมอหรือไม่มีคะแนน · ไม่มีผู้ถูกกำจัด'}</div>`:''}${r.isHost?'<button class="ww-btn" id="wwOpenVote" style="margin-top:14px">🗳️ เปิดช่วงลงคะแนน</button>':'<div class="ww-muted" style="margin-top:14px">รอเจ้าของห้องเปิดช่วงลงคะแนน</div>'}</div>`;
  if(phase==='vote')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">⚖️</span><div><strong>ลงคะแนนประหาร · วันที่ ${r.dayNumber}</strong><div class="ww-muted">เลือกผู้เล่นที่คิดว่าเป็นหมาป่า โหวตได้หนึ่งครั้ง</div></div></div>${!p?.alive?'<div class="ww-notice" style="margin-top:12px">คุณถูกกำจัดแล้ว ไม่สามารถลงคะแนนได้</div>':p?.voted?'<div class="ww-notice" style="margin-top:12px">คุณลงคะแนนแล้ว รอผู้เล่นคนอื่น…</div>':`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-vote="${esc(x.userId)}"><b>⚖️ ${esc(x.name)}</b><small>โหวตประหาร</small></button>`).join('')}<button class="ww-action" data-ww-vote="skip"><b>ข้ามการโหวต</b><small>งดออกเสียง</small></button></div>`}<div class="ww-muted" style="margin-top:12px">ลงคะแนนแล้ว ${r.voteCount}/${r.aliveCount} คน</div></div>`;
  if(phase==='hunter_shot')stage=`<div class="ww-panel"><div class="ww-phase"><span style="font-size:30px">🏹</span><div><strong>นายพรานลั่นไกครั้งสุดท้าย</strong><div class="ww-muted">${esc(r.pendingHunterName||'นายพราน')} เลือกผู้เล่นหนึ่งคนเพื่อยิงก่อนออกจากเกม</div></div></div>${String(r.meId)===String(r.pendingHunterId||'')?`<div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-hunter="${esc(x.userId)}"><b>🏹 ${esc(x.name)}</b><small>ยิงผู้เล่นคนนี้</small></button>`).join('')}</div>`:'<div class="ww-notice">รอนายพรานเลือกเป้าหมาย…</div>'}</div>`;
  if(phase==='finished')stage=`<div class="ww-result"><div style="font-size:46px">${r.winner==='jester'?'🤡':r.winner==='assassin'?'🗡️':r.winner==='village'?'🏆':'🐺'}</div><div class="ww-kicker">THE VILLAGE HAS FALLEN</div><h2>${r.winner==='jester'?'JESTER WINS':r.winner==='assassin'?'ASSASSIN WINS':r.winner==='village'?'VILLAGE WINS':'WEREWOLVES WIN'}</h2><p>${esc(r.resultText||'จบเกม')}</p><div class="ww-players" style="text-align:left;margin:16px 0">${(r.roleReveal||[]).map(x=>`<div class="ww-player"><b>${esc(x.name)}</b><small>${esc(x.role)} · ${x.alive?'รอดชีวิต':'ถูกกำจัด'}</small></div>`).join('')}</div>${r.isHost?'<button class="ww-btn" id="wwRematch">เริ่มเกมใหม่</button>':''}</div>`;
- const nightCurtainMarkup=nightCurtain?`<div class=\"ww-night-curtain\" role=\"status\" aria-live=\"polite\"><div class=\"ww-night-stars\" aria-hidden=\"true\">✦　·　✧　　·　✦</div><div class=\"ww-night-moon\">🌙</div><div class=\"ww-night-title\">ตอนกลางคืน</div><div class=\"ww-night-subtitle\">ทุกคนหลับตา · รอผู้ดำเนินเกมเรียกบทบาทของคุณ</div><div class=\"ww-night-pulse\"><i></i><i></i><i></i></div><button class=\"ww-btn red ww-night-exit\" id=\"wwExit\" type=\"button\">ออกจากเกม</button></div>`:'';
- return `<style>.ww-night-curtain{position:fixed;inset:0;z-index:99990;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 42%,#17253b 0%,#090f1d 42%,#02050c 100%);color:#f5f0e8}.ww-night-curtain:before,.ww-night-curtain:after{pointer-events:none;content:'';position:absolute;width: min(78vw,560px);height:min(78vw,560px);border:1px solid #b8a7d01c;border-radius:50%;animation:wwNightOrbit 18s linear infinite}.ww-night-curtain:after{width:min(105vw,760px);height:min(105vw,760px);animation-duration:28s;border-color:#8fa6d012}.ww-night-stars{pointer-events:none;position:absolute;top:12%;color:#d7d5ef88;letter-spacing:18px;font-size:20px;animation:wwNightFloat 4s ease-in-out infinite}.ww-night-moon{font-size:clamp(52px,9vw,82px);filter:drop-shadow(0 0 24px #b8c7ff77);animation:wwNightFloat 4s ease-in-out infinite}.ww-night-title{position:relative;margin-top:18px;font-size:clamp(34px,7vw,58px);font-weight:950;letter-spacing:3px;color:#f8f1df;text-shadow:0 0 28px #9aaee966}.ww-night-subtitle{position:relative;margin-top:12px;color:#b8c4d8;font-size:clamp(13px,2.5vw,16px);letter-spacing:.5px}.ww-night-pulse{display:flex;gap:7px;margin-top:26px}.ww-night-pulse i{width:6px;height:6px;border-radius:50%;background:#c9b9e8;animation:wwNightPulse 1.2s ease-in-out infinite}.ww-night-pulse i:nth-child(2){animation-delay:.18s}.ww-night-pulse i:nth-child(3){animation-delay:.36s}.ww-night-exit{position:relative;margin-top:34px!important;border:1px solid #7d5360!important;background:linear-gradient(135deg,#713c4b,#432633)!important;box-shadow:0 8px 28px #0007}@keyframes wwNightFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}@keyframes wwNightPulse{0%,80%,100%{opacity:.35;transform:scale(.75)}40%{opacity:1;transform:scale(1.25)}}@keyframes wwNightOrbit{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ww-night-curtain *{animation:none!important}}.ww-my-role-front{margin:0 0 14px}.ww-info-trigger{display:inline-flex;align-items:center;gap:7px;border:1px solid #b99a70;background:linear-gradient(135deg,#38465d,#202b3c);color:#ffe5bd;border-radius:999px;padding:9px 13px;font-weight:900;cursor:pointer;box-shadow:0 5px 18px #02081255}.ww-info-modal[hidden]{display:none!important}.ww-info-modal{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:16px}.ww-info-backdrop{position:absolute;inset:0;background:#030711d9;backdrop-filter:blur(7px)}.ww-info-dialog{position:relative;width:min(760px,100%);max-height:min(88vh,900px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #927653;border-radius:20px;background:linear-gradient(145deg,#202b3c,#101722);box-shadow:0 30px 100px #000b;color:#f4f0e8}.ww-info-top{display:flex;justify-content:space-between;align-items:center;padding:18px 20px 12px;border-bottom:1px solid #465367}.ww-info-top h3{margin:4px 0 0;font-size:21px;color:#ffe2b7}.ww-info-close{width:36px;height:36px;border:1px solid #59677a;border-radius:50%;background:#29364a;color:white;font-size:17px;cursor:pointer}.ww-info-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 18px;border-bottom:1px solid #39485c}.ww-info-tabs button{padding:11px;border:1px solid #526176;border-radius:11px;background:#172335;color:#cbd5e1;font-weight:800;cursor:pointer}.ww-info-tabs button.active{background:linear-gradient(120deg,#98704b,#654b3c);border-color:#d5b17e;color:#fff}.ww-info-content{padding:16px 18px 20px;overflow:auto;overscroll-behavior:contain}.ww-info-pane{display:none}.ww-info-pane.active{display:block}.ww-info-role-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.ww-info-role{padding:13px;border:1px solid #40516a;border-radius:13px;background:linear-gradient(145deg,#182638,#111a27)}.ww-info-role-head{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#ffe0b1}.ww-info-role-head b{font-size:15px}.ww-info-role-head span{white-space:nowrap;padding:4px 8px;border-radius:99px;background:#3a4659;color:#dbe5f1;font-size:11px}.ww-info-role-meta{margin:6px 0 9px;color:#d7b88f;font-size:11px;font-weight:800}.ww-info-role p{margin:6px 0;color:#c7d0dc;font-size:12px;line-height:1.55}.ww-info-role p b{color:#f0d3aa}.ww-info-dialog .ww-secret{margin-top:10px}@media(max-width:620px){.ww-info-modal{padding:8px}.ww-info-dialog{max-height:94vh;border-radius:15px}.ww-info-top{padding:14px}.ww-info-content{padding:12px}.ww-info-role-list{grid-template-columns:1fr}.ww-info-dialog .ww-role-guide-grid{grid-template-columns:1fr}.ww-info-trigger span{display:none}}</style><section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-info-trigger" id="wwInfoOpen" type="button" aria-label="ข้อมูลบทบาท">ⓘ <span>ข้อมูลบทบาท</span></button><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${nightCurtainMarkup||`${p?.role?`<div class=\"ww-my-role-front\">${roleCard}</div>`:''}${stage}<div class=\"ww-panel\"><div class=\"ww-room\"><h3>สมาชิกในหมู่บ้าน</h3><span class=\"ww-muted\">${players.length} คน</span></div><div class=\"ww-players\">${playerCards}</div></div>`}</div>${infoModal}</section>`;
+ return `<style>.ww-my-role-front{margin:0 0 14px}.ww-info-trigger{display:inline-flex;align-items:center;gap:7px;border:1px solid #b99a70;background:linear-gradient(135deg,#38465d,#202b3c);color:#ffe5bd;border-radius:999px;padding:9px 13px;font-weight:900;cursor:pointer;box-shadow:0 5px 18px #02081255}.ww-info-modal[hidden]{display:none!important}.ww-info-modal{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:16px}.ww-info-backdrop{position:absolute;inset:0;background:#030711d9;backdrop-filter:blur(7px)}.ww-info-dialog{position:relative;width:min(760px,100%);max-height:min(88vh,900px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #927653;border-radius:20px;background:linear-gradient(145deg,#202b3c,#101722);box-shadow:0 30px 100px #000b;color:#f4f0e8}.ww-info-top{display:flex;justify-content:space-between;align-items:center;padding:18px 20px 12px;border-bottom:1px solid #465367}.ww-info-top h3{margin:4px 0 0;font-size:21px;color:#ffe2b7}.ww-info-close{width:36px;height:36px;border:1px solid #59677a;border-radius:50%;background:#29364a;color:white;font-size:17px;cursor:pointer}.ww-info-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 18px;border-bottom:1px solid #39485c}.ww-info-tabs button{padding:11px;border:1px solid #526176;border-radius:11px;background:#172335;color:#cbd5e1;font-weight:800;cursor:pointer}.ww-info-tabs button.active{background:linear-gradient(120deg,#98704b,#654b3c);border-color:#d5b17e;color:#fff}.ww-info-content{padding:16px 18px 20px;overflow:auto;overscroll-behavior:contain}.ww-info-pane{display:none}.ww-info-pane.active{display:block}.ww-info-role-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.ww-info-role{padding:13px;border:1px solid #40516a;border-radius:13px;background:linear-gradient(145deg,#182638,#111a27)}.ww-info-role-head{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#ffe0b1}.ww-info-role-head b{font-size:15px}.ww-info-role-head span{white-space:nowrap;padding:4px 8px;border-radius:99px;background:#3a4659;color:#dbe5f1;font-size:11px}.ww-info-role-meta{margin:6px 0 9px;color:#d7b88f;font-size:11px;font-weight:800}.ww-info-role p{margin:6px 0;color:#c7d0dc;font-size:12px;line-height:1.55}.ww-info-role p b{color:#f0d3aa}.ww-info-dialog .ww-secret{margin-top:10px}@media(max-width:620px){.ww-info-modal{padding:8px}.ww-info-dialog{max-height:94vh;border-radius:15px}.ww-info-top{padding:14px}.ww-info-content{padding:12px}.ww-info-role-list{grid-template-columns:1fr}.ww-info-dialog .ww-role-guide-grid{grid-template-columns:1fr}.ww-info-trigger span{display:none}}</style><section class="ww-shell">${header}<div class="ww-body"><div class="ww-room"><div><div class="ww-kicker">${esc(r.title)}</div><div class="ww-muted">รหัส ${esc(r.code)} · ${players.length} ผู้เล่น · เหลือ ${r.aliveCount} คน</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="ww-pill">${esc(phases[phase]||phase)}</span><button class="ww-info-trigger" id="wwInfoOpen" type="button" aria-label="ข้อมูลบทบาท">ⓘ <span>ข้อมูลบทบาท</span></button><button class="ww-btn red" id="wwExit">ออกจากเกม</button></div></div>${p?.role?`<div class="ww-my-role-front">${roleCard}</div>`:''}${stage}<div class="ww-panel"><div class="ww-room"><h3>สมาชิกในหมู่บ้าน</h3><span class="ww-muted">${players.length} คน</span></div><div class="ww-players">${playerCards}</div></div></div>${infoModal}</section>`;
 }
 function wireWerewolf(){
  $('#wwInfoOpen')?.addEventListener('click',()=>{const modal=$('#wwInfoModal');if(modal){modal.hidden=false;document.body.style.overflow='hidden';}});
@@ -950,6 +878,10 @@ function wireWerewolf(){
    actionAccepted=true;
    const sound=['wolf','alpha'].includes(role)?'wolfAttack':['seer','detective'].includes(role)?'seer':role==='witch'?(type==='save'?'potion':type==='poison'?'poison':'witch'):['bodyguard','guardian'].includes(role)?'protect':'tap';
    GCSound.play(sound);
+   // Skill animation is local to the acting player and only plays after the API accepts the action.
+   const chosenPlayer=werewolfState?.room?.players?.find(x=>String(x.userId)===String(targetId));
+   if(role==='seer'&&type==='inspect')showWerewolfSkillEffect('seer',chosenPlayer?.name||'');
+   if(['bodyguard','guardian'].includes(role)&&type==='protect')showWerewolfSkillEffect('protect',chosenPlayer?.name||'');
    if(werewolfState?.room?.me){werewolfState.room.me.nightSubmitted=true;}
    if(role==='seer'&&type==='inspect'&&response.seerResult&&werewolfState?.room?.me){
     werewolfState.room.me.seerResult={isWolf:!!response.seerResult.isWolf,checkedAt:new Date().toISOString()};
