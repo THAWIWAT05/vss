@@ -175,7 +175,7 @@ function showWerewolfNightScreen(config){
  if(existing)return Promise.resolve();
  return queueWerewolfEffect(()=>new Promise(resolve=>{
   if(document.getElementById('wwNightScreen')){resolve();return;}
-  const el=document.createElement('div');el.id='wwNightScreen';el.className=config.sound==='nightHowl'?'is-intro':'is-report';
+  const el=document.createElement('div');el.id='wwNightScreen';
   el.setAttribute('role','status');el.setAttribute('aria-live','polite');
   el.innerHTML=`
    <style>
@@ -183,24 +183,7 @@ function showWerewolfNightScreen(config){
     #wwNightScreen:before,#wwNightScreen:after{content:'';position:absolute;inset:-30%;pointer-events:none}
     #wwNightScreen:before{background:radial-gradient(circle at 18% 22%,#ffffff55 0 1px,transparent 2px),radial-gradient(circle at 77% 31%,#ffffff66 0 1px,transparent 2px),radial-gradient(circle at 62% 78%,#ffffff44 0 1px,transparent 2px),radial-gradient(circle at 34% 69%,#ffffff55 0 1px,transparent 2px);background-size:260px 220px;opacity:.55;animation:wwNightStars 12s linear infinite}
     #wwNightScreen:after{background:radial-gradient(ellipse at 50% 100%,#111d31aa,transparent 58%)}
-    /* Decorative night atmosphere: isolated behind the text and never participates in the FX queue. */
-    #wwNightScreen .ww-night-atmosphere{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-    #wwNightScreen .ww-night-moonbeam{position:absolute;inset:-20% 10% 12%;opacity:.28;background:conic-gradient(from 165deg at 50% 8%,transparent 0deg,#c7d8f31c 9deg,transparent 18deg,#c7d8f31a 27deg,transparent 38deg);filter:blur(12px);animation:wwNightBeam 9s ease-in-out infinite alternate}
-    #wwNightScreen .ww-night-fog{position:absolute;left:-35%;width:170%;height:34%;bottom:-5%;border-radius:50%;background:radial-gradient(ellipse at center,#b9c9dc25 0%,#aebdd51a 32%,transparent 72%);filter:blur(22px);opacity:.65;will-change:transform}
-    #wwNightScreen .ww-night-fog.fog-a{animation:wwNightFogA 19s ease-in-out infinite alternate}
-    #wwNightScreen .ww-night-fog.fog-b{bottom:8%;opacity:.36;transform:scaleX(-1);animation:wwNightFogB 27s ease-in-out infinite alternate}
-    #wwNightScreen .ww-night-fog.fog-c{bottom:20%;height:22%;opacity:.2;filter:blur(30px);animation:wwNightFogA 31s ease-in-out infinite alternate-reverse}
-    #wwNightScreen .ww-night-forest{position:absolute;left:0;right:0;bottom:0;height:28%;opacity:.48;background:linear-gradient(180deg,transparent,#030711 76%),linear-gradient(90deg,transparent 0 5%,#050a12 5% 7%,transparent 7% 12%,#050a12 12% 14%,transparent 14% 84%,#050a12 84% 87%,transparent 87% 93%,#050a12 93% 96%,transparent 96%);clip-path:polygon(0 48%,5% 30%,8% 51%,13% 18%,17% 55%,22% 35%,26% 59%,31% 42%,36% 62%,41% 33%,46% 58%,51% 40%,56% 61%,61% 29%,66% 55%,71% 37%,76% 60%,81% 25%,86% 54%,91% 34%,96% 58%,100% 42%,100% 100%,0 100%)}
-    #wwNightScreen .ww-night-fireflies{position:absolute;inset:0}
-    #wwNightScreen .ww-night-fireflies i{position:absolute;width:3px;height:3px;border-radius:50%;background:#d9f6b0;box-shadow:0 0 9px 3px #c9f49a77;opacity:0;animation:wwNightFirefly 5.8s ease-in-out infinite}
-    #wwNightScreen .ww-night-fireflies i:nth-child(1){left:12%;top:67%;animation-delay:-1s}
-    #wwNightScreen .ww-night-fireflies i:nth-child(2){left:24%;top:78%;animation-delay:-3.2s}
-    #wwNightScreen .ww-night-fireflies i:nth-child(3){left:39%;top:71%;animation-delay:-2s}
-    #wwNightScreen .ww-night-fireflies i:nth-child(4){left:61%;top:80%;animation-delay:-4.1s}
-    #wwNightScreen .ww-night-fireflies i:nth-child(5){left:74%;top:68%;animation-delay:-.6s}
-    #wwNightScreen .ww-night-fireflies i:nth-child(6){left:88%;top:76%;animation-delay:-2.8s}
-    #wwNightScreen .ww-night-center{position:relative;z-index:2;width:min(900px,94vw);padding:24px 18px;text-shadow:0 4px 28px #000b}
-    #wwNightScreen.is-intro .ww-night-center{animation:wwNightCenterIn .8s .15s both}
+    #wwNightScreen .ww-night-center{position:relative;z-index:1;width:min(900px,94vw);padding:24px 18px;text-shadow:0 4px 28px #000b}
     #wwNightScreen .ww-night-icon{font-size:clamp(58px,12vw,104px);line-height:1;margin-bottom:22px;filter:drop-shadow(0 0 30px #b7c8ed88);animation:wwNightMoon 3.8s ease-in-out infinite}
     #wwNightScreen .ww-night-kicker{font-size:clamp(10px,1.4vw,13px);letter-spacing:clamp(3px,.7vw,7px);font-weight:1000;color:#d8b987;margin-bottom:14px}
     #wwNightScreen h2{font-size:clamp(30px,6vw,64px);line-height:1.12;margin:0 0 16px;color:#fff1d8;font-weight:1000;letter-spacing:1px}
@@ -211,14 +194,8 @@ function showWerewolfNightScreen(config){
     @keyframes wwNightStars{to{transform:translate3d(2%,3%,0)}}
     @keyframes wwNightMoon{0%,100%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 24px #b7c8ed66)}50%{transform:translateY(-8px) scale(1.035);filter:drop-shadow(0 0 38px #b7c8edaa)}}
     @keyframes wwNightScreenTimer{to{transform:scaleX(0)}}
-    @keyframes wwNightFogA{from{transform:translate3d(-8%,0,0) scale(1)}to{transform:translate3d(9%,-8px,0) scale(1.12)}}
-    @keyframes wwNightFogB{from{transform:translate3d(8%,0,0) scaleX(-1)}to{transform:translate3d(-10%,6px,0) scaleX(-1.08)}}
-    @keyframes wwNightBeam{from{transform:translateX(-2%) rotate(-2deg);opacity:.15}to{transform:translateX(3%) rotate(2deg);opacity:.34}}
-    @keyframes wwNightFirefly{0%,100%{opacity:0;transform:translate3d(0,8px,0) scale(.7)}35%,65%{opacity:.8}50%{transform:translate3d(9px,-17px,0) scale(1.2)}}
-    @keyframes wwNightCenterIn{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
     @media(prefers-reduced-motion:reduce){#wwNightScreen *,#wwNightScreen:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
    </style>
-   ${el.classList.contains('is-intro')?'<div class="ww-night-atmosphere" aria-hidden="true"><div class="ww-night-moonbeam"></div><div class="ww-night-fog fog-a"></div><div class="ww-night-fog fog-b"></div><div class="ww-night-fog fog-c"></div><div class="ww-night-forest"></div><div class="ww-night-fireflies"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>':''}
    <div class="ww-night-center"><div class="ww-night-icon">${config.icon||'🌙'}</div><div class="ww-night-kicker">${config.kicker||'VILLAGE · NIGHTFALL'}</div><h2>${config.title||'เข้าสู่กลางคืน'}</h2><p>${config.detail||'ทุกคนโปรดปิดไมค์และเตรียมตัวเข้าสู่ค่ำคืน'}</p><div class="ww-night-progress"><span></span></div></div>`;
   document.body.appendChild(el);
   if(config.sound==='nightHowl'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
