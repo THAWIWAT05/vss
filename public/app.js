@@ -166,16 +166,25 @@ function showWerewolfNightAnnouncement(night,roomId){
  if(!night||!roomId)return;
  const key=`gcWWNightAnnouncement:${roomId}:${night.announcedAt||night.nightNumber||'latest'}`;
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
- document.getElementById('wwNightAnnouncementPopup')?.remove();
+ // Wait for the longest night/death GIF scene (6.5s) to finish before showing the report.
+ const existing=document.getElementById('wwNightAnnouncementPopup');
+ if(existing)return;
  const names=Array.isArray(night.killed)?night.killed.filter(Boolean):[];
  const el=document.createElement('div');el.id='wwNightAnnouncementPopup';
- el.style.cssText='position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:18px;background:#020711a8;backdrop-filter:blur(5px);animation:wwNightPopIn .22s ease-out';
+ el.style.cssText='position:fixed;inset:0;z-index:100000;display:none;place-items:center;padding:18px;background:#020711a8;backdrop-filter:blur(5px);animation:wwNightPopIn .22s ease-out';
  const title=names.length?'รายงานเหตุการณ์เมื่อคืน':'รายงานรุ่งเช้า · ไม่มีผู้เสียชีวิต';
  const detail=names.length?`เมื่อคืนมีผู้เสียชีวิต：${names.map(esc).join('、')}`:'ทุกคนรอดชีวิตจากเหตุการณ์เมื่อคืนนี้';
  el.innerHTML=`<style>@keyframes wwNightPopIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}@keyframes wwNightPopOut{to{opacity:0;transform:scale(.98)}}</style><div style="width:min(480px,100%);padding:24px 22px;border:1px solid #c29a68;border-radius:20px;background:linear-gradient(145deg,#342a22,#172337);color:#f8ead6;text-align:center;box-shadow:0 24px 90px #000b"><div style="font-size:42px;margin-bottom:8px">${names.length?'⚰️':'🌤️'}</div><div style="font-size:11px;letter-spacing:2px;color:#d6b78e;font-weight:900">VILLAGE NIGHT REPORT</div><h2 style="margin:8px 0 10px;color:#ffe0b2;font-size:22px">${title}</h2><p style="margin:0;color:#eee0ce;line-height:1.7;font-size:15px">${detail}</p>${night.saved?'<p style="margin:10px 0 0;color:#9fe0b2;font-size:13px">มีผู้ได้รับการช่วยชีวิต</p>':''}${night.bodyguardSacrifice?'<p style="margin:6px 0 0;color:#b9d5ff;font-size:13px">บอดี้การ์ดสละตัวปกป้องเป้าหมาย</p>':''}<div style="height:3px;margin-top:20px;border-radius:9px;background:#ffffff24;overflow:hidden"><div id="wwNightPopupProgress" style="height:100%;width:100%;background:#d6ad78;transform-origin:left;animation:wwNightPopupTimer 5s linear forwards"></div></div></div><style>@keyframes wwNightPopupTimer{to{transform:scaleX(0)}}</style>`;
+ // Keep the popup mounted but hidden while death/skill GIF scenes finish.
  document.body.appendChild(el);
- const timer=setTimeout(()=>{el.style.animation='wwNightPopOut .2s ease-in forwards';setTimeout(()=>el.remove(),220)},5000);
- el.addEventListener('click',()=>{clearTimeout(timer);el.remove()},{once:true});
+ // Death GIFs run for 6.5 seconds; leave a small gap before the 5-second report popup.
+ setTimeout(()=>{
+  if(!document.body.contains(el))return;
+  el.style.display='grid';
+  el.style.animation='wwNightPopIn .22s ease-out';
+  const timer=setTimeout(()=>{el.style.animation='wwNightPopOut .2s ease-in forwards';setTimeout(()=>el.remove(),220)},5000);
+  el.addEventListener('click',()=>{clearTimeout(timer);el.remove()},{once:true});
+ },6800);
 }
 
 function showWerewolfSkillEffect(kind,targetName=''){
@@ -858,8 +867,8 @@ function werewolf(){
   else if(['wolf','alpha'].includes(p.role)&&r.wolfKillLocked)action=`<div class="ww-notice">🐺 ${esc(r.wolfKillTargetName||'หมาป่าอีกคน')} เลือกเป้าหมายแล้ว · ล็อกการเลือกฆ่าของทีมคืนนี้</div>`;
    else if(!r.myNightTurn)action=`<div class="ww-notice">⏳ ยังไม่ถึงคิวของคุณ<br><b>กำลังดำเนินการ: ${esc(r.currentNightRole||'กำลังสรุปผล')}</b><br><small>เมื่อถึงบทบาทของคุณ ปุ่มใช้สกิลจะแสดงที่นี่โดยอัตโนมัติ</small></div>`;
   else if(['wolf','alpha'].includes(p.role))action=r.wolfKillLocked?`<div class="ww-notice">🐺 ${esc(r.wolfKillTargetName||'หมาป่าอีกคน')} เลือกเป้าหมายแล้ว · ล็อกการเลือกฆ่าของทีมคืนนี้</div>`:`<div class="ww-muted">เลือกเหยื่อ 1 คน เมื่อหมาป่าคนแรกยืนยัน ระบบจะล็อกเป้าหมายให้ทั้งทีมทันที</div><div class="ww-action-grid">${alive.filter(x=>!x.isWolfMate).map(x=>`<button class="ww-action" data-ww-night="kill" data-target="${esc(x.userId)}"><b>🐺 ${esc(x.name)}</b><small>เลือกเป็นเหยื่อคืนนี้</small></button>`).join('')}</div>`;
-  else if(['seer','detective'].includes(p.role))action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบผลจะเห็นเฉพาะคุณ</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="inspect" data-target="${esc(x.userId)}"><b>🔮 ${esc(x.name)}</b><small>ตรวจสอบฝ่าย</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามการตรวจคืนนี้</b><small>ส่งคิวให้บทบาทถัดไป</small></button></div>`;
-  else if(p.role==='bodyguard'||p.role==='guardian')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อปกป้องคืนนี้</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="protect" data-target="${esc(x.userId)}"><b>${p.role==='bodyguard'?'🛡️':'✨'} ${esc(x.name)}</b><small>ปกป้องผู้เล่นคนนี้</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามการปกป้องคืนนี้</b><small>ส่งคิวให้บทบาทถัดไป</small></button></div>`;
+  else if(['seer','detective'].includes(p.role))action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อตรวจสอบผลจะเห็นเฉพาะคุณ</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="inspect" data-target="${esc(x.userId)}"><b>🔮 ${esc(x.name)}</b><small>ตรวจสอบฝ่าย</small></button>`).join('')}</div>`;
+  else if(p.role==='bodyguard'||p.role==='guardian')action=`<div class="ww-muted">เลือกผู้เล่นหนึ่งคนเพื่อปกป้องคืนนี้ · ต้องเลือกเป้าหมายก่อนส่งคำสั่ง</div><div class="ww-action-grid">${alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="protect" data-target="${esc(x.userId)}"><b>${p.role==='bodyguard'?'🛡️':'✨'} ${esc(x.name)}</b><small>ปกป้องผู้เล่นคนนี้</small></button>`).join('')}</div>`;
   else if(p.role==='priest')action=`<div class="ww-muted">นักบวชปกป้องผู้เล่นจากหมาป่าได้ 1 ครั้งตลอดเกม</div><div class="ww-action-grid">${p.priestSaveUsed?'<div class="ww-notice">ใช้พรปกป้องไปแล้ว</div>':alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="priest_save" data-target="${esc(x.userId)}"><b>✝️ ${esc(x.name)}</b><small>ปกป้องจากหมาป่า</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามคืนนี้</b></button></div>`;
   else if(p.role==='medium')action=`<div class="ww-muted">คนทรงตรวจสอบบทบาทจริงของผู้เล่นที่ตายแล้วได้ 1 ครั้ง</div>${p.mediumResult?`<div class="ww-notice">ผลตรวจ: <b>${esc(p.mediumResult.role)}</b></div>`:p.mediumUsed?'<div class="ww-notice">ใช้ความสามารถไปแล้ว</div>':`<div class="ww-action-grid">${players.filter(x=>!x.alive).map(x=>`<button class="ww-action" data-ww-night="medium_inspect" data-target="${esc(x.userId)}"><b>🔮 ${esc(x.name)}</b><small>ตรวจสอบบทบาท</small></button>`).join('')||'<div class="ww-notice">ยังไม่มีผู้เล่นที่เสียชีวิต</div>'}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามคืนนี้</b></button></div>`}`;
   else if(p.role==='assassin')action=`<div class="ww-muted">นักฆ่ากำจัดผู้เล่นหนึ่งคนได้ 1 ครั้ง หากเป้าหมายถูกกำจัด คุณชนะทันที</div><div class="ww-action-grid">${p.assassinUsed?'<div class="ww-notice">ใช้ความสามารถไปแล้ว</div>':alive.filter(x=>String(x.userId)!==String(r.meId)).map(x=>`<button class="ww-action" data-ww-night="assassin_kill" data-target="${esc(x.userId)}"><b>🗡️ ${esc(x.name)}</b><small>ลอบสังหาร</small></button>`).join('')}<button class="ww-action" data-ww-night="skip"><b>🌙 ข้ามคืนนี้</b></button></div>`;
