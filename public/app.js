@@ -169,27 +169,62 @@ function queueWerewolfEffect(run){
  return task;
 }
 
+function showWerewolfNightScreen(config){
+ if(!config?.id)return Promise.resolve();
+ const existing=document.getElementById('wwNightScreen');
+ if(existing)return Promise.resolve();
+ return queueWerewolfEffect(()=>new Promise(resolve=>{
+  if(document.getElementById('wwNightScreen')){resolve();return;}
+  const el=document.createElement('div');el.id='wwNightScreen';
+  el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+  el.innerHTML=`
+   <style>
+    #wwNightScreen{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;overflow:hidden;padding:24px;background:radial-gradient(ellipse at 50% 42%,#253149 0%,#101827 43%,#03060d 100%);color:#f8ead6;font-family:inherit;text-align:center;opacity:0;animation:wwNightScreenIn .55s ease-out forwards}
+    #wwNightScreen:before,#wwNightScreen:after{content:'';position:absolute;inset:-30%;pointer-events:none}
+    #wwNightScreen:before{background:radial-gradient(circle at 18% 22%,#ffffff55 0 1px,transparent 2px),radial-gradient(circle at 77% 31%,#ffffff66 0 1px,transparent 2px),radial-gradient(circle at 62% 78%,#ffffff44 0 1px,transparent 2px),radial-gradient(circle at 34% 69%,#ffffff55 0 1px,transparent 2px);background-size:260px 220px;opacity:.55;animation:wwNightStars 12s linear infinite}
+    #wwNightScreen:after{background:radial-gradient(ellipse at 50% 100%,#111d31aa,transparent 58%)}
+    #wwNightScreen .ww-night-center{position:relative;z-index:1;width:min(900px,94vw);padding:24px 18px;text-shadow:0 4px 28px #000b}
+    #wwNightScreen .ww-night-icon{font-size:clamp(58px,12vw,104px);line-height:1;margin-bottom:22px;filter:drop-shadow(0 0 30px #b7c8ed88);animation:wwNightMoon 3.8s ease-in-out infinite}
+    #wwNightScreen .ww-night-kicker{font-size:clamp(10px,1.4vw,13px);letter-spacing:clamp(3px,.7vw,7px);font-weight:1000;color:#d8b987;margin-bottom:14px}
+    #wwNightScreen h2{font-size:clamp(30px,6vw,64px);line-height:1.12;margin:0 0 16px;color:#fff1d8;font-weight:1000;letter-spacing:1px}
+    #wwNightScreen p{max-width:720px;margin:0 auto;color:#d7deeb;font-size:clamp(14px,2vw,19px);line-height:1.8}
+    #wwNightScreen .ww-night-progress{width:min(260px,58vw);height:3px;margin:34px auto 0;border-radius:99px;background:#ffffff25;overflow:hidden}
+    #wwNightScreen .ww-night-progress span{display:block;width:100%;height:100%;background:linear-gradient(90deg,#9baecc,#f1d3a2);transform-origin:left;animation:wwNightScreenTimer 5s linear forwards}
+    @keyframes wwNightScreenIn{to{opacity:1}}
+    @keyframes wwNightStars{to{transform:translate3d(2%,3%,0)}}
+    @keyframes wwNightMoon{0%,100%{transform:translateY(0) scale(1);filter:drop-shadow(0 0 24px #b7c8ed66)}50%{transform:translateY(-8px) scale(1.035);filter:drop-shadow(0 0 38px #b7c8edaa)}}
+    @keyframes wwNightScreenTimer{to{transform:scaleX(0)}}
+    @media(prefers-reduced-motion:reduce){#wwNightScreen *,#wwNightScreen:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+   </style>
+   <div class="ww-night-center"><div class="ww-night-icon">${config.icon||'🌙'}</div><div class="ww-night-kicker">${config.kicker||'VILLAGE · NIGHTFALL'}</div><h2>${config.title||'เข้าสู่กลางคืน'}</h2><p>${config.detail||'ทุกคนโปรดปิดไมค์และเตรียมตัวเข้าสู่ค่ำคืน'}</p><div class="ww-night-progress"><span></span></div></div>`;
+  document.body.appendChild(el);
+  if(config.sound==='nightHowl'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
+  let finished=false;
+  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);el.style.transition='opacity .35s ease';el.style.opacity='0';setTimeout(()=>{el.remove();resolve()},360)};
+  const timer=setTimeout(finish,5000);
+ }));
+}
+
 function showWerewolfNightAnnouncement(night,roomId){
  if(!night||!roomId)return;
  const key=`gcWWNightAnnouncement:${roomId}:${night.announcedAt||night.nightNumber||'latest'}`;
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
- if(document.getElementById('wwNightAnnouncementPopup'))return;
  const names=Array.isArray(night.killed)?night.killed.filter(Boolean):[];
- const el=document.createElement('div');el.id='wwNightAnnouncementPopup';
- el.style.cssText='position:fixed;inset:0;z-index:100000;display:none;place-items:center;padding:18px;background:#020711a8;backdrop-filter:blur(5px);animation:wwNightPopIn .22s ease-out';
  const title=names.length?'รายงานเหตุการณ์เมื่อคืน':'รายงานรุ่งเช้า · ไม่มีผู้เสียชีวิต';
- const detail=names.length?`เมื่อคืนมีผู้เสียชีวิต：${names.map(esc).join('、')}`:'ทุกคนรอดชีวิตจากเหตุการณ์เมื่อคืนนี้';
- el.innerHTML=`<style>@keyframes wwNightPopIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}@keyframes wwNightPopOut{to{opacity:0;transform:scale(.98)}}</style><div style="width:min(480px,100%);padding:24px 22px;border:1px solid #c29a68;border-radius:20px;background:linear-gradient(145deg,#342a22,#172337);color:#f8ead6;text-align:center;box-shadow:0 24px 90px #000b"><div style="font-size:42px;margin-bottom:8px">${names.length?'⚰️':'🌤️'}</div><div style="font-size:11px;letter-spacing:2px;color:#d6b78e;font-weight:900">VILLAGE NIGHT REPORT</div><h2 style="margin:8px 0 10px;color:#ffe0b2;font-size:22px">${title}</h2><p style="margin:0;color:#eee0ce;line-height:1.7;font-size:15px">${detail}</p>${night.saved?'<p style="margin:10px 0 0;color:#9fe0b2;font-size:13px">มีผู้ได้รับการช่วยชีวิต</p>':''}${night.bodyguardSacrifice?'<p style="margin:6px 0 0;color:#b9d5ff;font-size:13px">บอดี้การ์ดสละตัวปกป้องเป้าหมาย</p>':''}<div style="height:3px;margin-top:20px;border-radius:9px;background:#ffffff24;overflow:hidden"><div id="wwNightPopupProgress" style="height:100%;width:100%;background:#d6ad78;transform-origin:left;animation:wwNightPopupTimer 5s linear forwards"></div></div></div><style>@keyframes wwNightPopupTimer{to{transform:scaleX(0)}}</style>`;
- document.body.appendChild(el);
- // Queue the report behind any skill and death scenes, rather than relying on a fixed delay.
- setTimeout(()=>queueWerewolfEffect(()=>new Promise(resolve=>{
-  if(!document.body.contains(el)){resolve();return;}
-  el.style.display='grid';el.style.animation='wwNightPopIn .22s ease-out';
-  let finished=false;
-  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);el.style.animation='wwNightPopOut .2s ease-in forwards';setTimeout(()=>{el.remove();resolve()},220)};
-  const timer=setTimeout(finish,5000);
-  el.addEventListener('click',finish,{once:true});
- })),6800);
+ const detail=names.length?`เมื่อคืนมีผู้เสียชีวิต: ${names.map(esc).join('、')}`:'ทุกคนรอดชีวิตจากเหตุการณ์เมื่อคืนนี้';
+ const extras=[night.saved?'มีผู้ได้รับการช่วยชีวิต':'',night.bodyguardSacrifice?'บอดี้การ์ดสละตัวปกป้องเป้าหมาย':''].filter(Boolean).join(' · ');
+ // The dawn report uses the same full-screen night-stage presentation and waits in the shared FX queue.
+ setTimeout(()=>showWerewolfNightScreen({
+  id:key,icon:names.length?'⚰️':'🌤️',kicker:'VILLAGE NIGHT REPORT',title,detail:extras?`${detail} · ${extras}`:detail
+ }),6800);
+}
+
+function showWerewolfNightIntro(room,roomId){
+ if(!room||!roomId)return;
+ const nightNo=room.dayNumber||room.nightNumber||'current';
+ const key=`gcWWNightIntro:${roomId}:${nightNo}`;
+ try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
+ showWerewolfNightScreen({id:key,icon:'🌙',kicker:'THE VILLAGE FALLS SILENT',title:'เข้าสู่กลางคืน',detail:'ทุกคนโปรดปิดไมค์… หมาป่ากำลังออกล่า',sound:'nightHowl'});
 }
 
 function showWerewolfSkillEffect(kind,targetName=''){
@@ -758,9 +793,10 @@ async function loadWerewolf(roomId, forceLobby=false){
  const next=await api('/api/werewolf'+q);
  if(requestSeq!==werewolfRequestSeq)return;
  const old=werewolfState?.room,now=next?.room;
+ let enteredNight=false;
  if(old&&now&&String(old.id)===String(now.id)){
   if(old.phase!==now.phase){
-   if(now.phase==='night'){GCSound.play('night');setTimeout(()=>GCSound.play('wolf'),700);}
+   if(now.phase==='night'){enteredNight=true;}
    else if(now.phase==='day')GCSound.play('bell');
    else if(now.phase==='vote')GCSound.play('vote');
    else if(now.phase==='hunter_shot')GCSound.play('hunter');
@@ -792,6 +828,8 @@ async function loadWerewolf(roomId, forceLobby=false){
  if(now?.lastNight&&(!old||String(old.id)!==String(now.id)||JSON.stringify(old.lastNight||null)!==JSON.stringify(now.lastNight||null))){
   showWerewolfNightAnnouncement(now.lastNight,now.id);
  }
+ // Queue the next-night title after any death scene discovered in this same room update.
+ if(enteredNight)showWerewolfNightIntro(now,now.id);
  werewolfState=next;
  if(next?.room?.id&&!showLobby)localStorage.setItem('gcWerewolfRoom',next.room.id);
  if(!next?.room&&roomId)localStorage.removeItem('gcWerewolfRoom');
