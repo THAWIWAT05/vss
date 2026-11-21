@@ -402,6 +402,7 @@ function wwHunterShotNextPhase(hunter){return wwHunterWasKilledAtNight(hunter)?'
 function wwQueueHunterShot(room,hunter){
  if(!hunter||hunter.role!=='hunter'||hunter.alive||hunter.hunterShotUsed)return false;
  room.pendingHunterId=String(hunter.userId);
+ room.hunterShotFromNight=wwHunterWasKilledAtNight(hunter);
  room.phase='hunter_shot';
  return true;
 }
@@ -476,7 +477,7 @@ function wwResolveNight(room){
  killed.forEach((cause,id)=>{const p=room.players.find(x=>String(x.userId)===String(id));if(p&&p.alive){p.alive=false;p.deathReason=cause;if(['wolf','poison','assassin','vote','hunter','bodyguard'].includes(cause))p.deathEvent={id:`${room.id}:${room.dayNumber||0}:${id}:${Date.now()}`,cause,createdAt:isoNow()};}});
  if([...killed.values()].includes('assassin'))wwFinish(room,'assassin',`${assassin?.name||'นักฆ่า'} กำจัดเป้าหมายสำเร็จ · นักฆ่าชนะเกม`);
  wwEnsureHost(room);
- room.lastNight={killed:[...killed.keys()].map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice};
+ room.lastNight={nightNumber:(room.dayNumber||0)+1,killed:[...killed.keys()].map(id=>room.players.find(p=>String(p.userId)===String(id))?.name).filter(Boolean),saved,bodyguardSacrifice,announcedAt:isoNow()};
  if(guardian?.nightAction?.targetId)room.lastProtectedId=String(guardian.nightAction.targetId);
  room.players.forEach(p=>{p.nightAction=null;p.voted=null;});
  room.wolfKillTargetId=null;room.wolfKillLockedBy=null;
@@ -503,7 +504,7 @@ function wwPublic(room,req){
   currentNightRole:room.phase==='night'?(wwCurrentNightStage(room)?.label||'กำลังสรุปผลกลางคืน'):null,
   myNightTurn:room.phase==='night'&&!!me?.alive&&!!wwCurrentNightStage(room)&&wwCurrentNightStage(room).roles.includes(me.role)&&!me.nightAction,
   ...(me?.alive&&WW_WOLF_ROLES.includes(me.role)?{wolfKillLocked:!!room.wolfKillTargetId,wolfKillTargetName:room.players.find(x=>String(x.userId)===String(room.wolfKillTargetId))?.name||null,wolfChat:(room.wolfChat||[]).slice(-60)}:{}),
-  pendingHunterId:room.phase==='hunter_shot'?room.pendingHunterId:null,pendingHunterName:room.phase==='hunter_shot'?room.players.find(p=>String(p.userId)===String(room.pendingHunterId))?.name:null,
+  pendingHunterId:room.phase==='hunter_shot'?room.pendingHunterId:null,pendingHunterName:room.phase==='hunter_shot'?room.players.find(p=>String(p.userId)===String(room.pendingHunterId))?.name:null,hunterShotFromNight:room.phase==='hunter_shot'&&!!room.hunterShotFromNight,
   voteCount:alive.filter(p=>p.voted).length,
   lastNight:room.phase==='day'||room.phase==='vote'||room.phase==='hunter_shot'||room.phase==='finished'?room.lastNight||null:null,
   lastVote:room.phase==='night'||room.phase==='day'||room.phase==='vote'||room.phase==='finished'?room.lastVote||null:null,
@@ -623,7 +624,7 @@ app.post('/api/werewolf/:id/start',auth,(req,res)=>{
  const roles=deck.roles;
  for(let i=roles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[roles[i],roles[j]]=[roles[j],roles[i]];}
  r.players.forEach((p,i)=>{p.role=roles[i];p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.deathEvent=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.priestSaveUsed=false;p.mediumUsed=false;p.mediumResult=null;p.detectiveResult=null;p.assassinUsed=false;p.kingSaved=false;p.deathReason=null;});
- r.phase='night';r.dayNumber=0;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;r.wolfChat=[];r.wolfKillTargetId=null;r.wolfKillLockedBy=null;r.startedAt=isoNow();r.lastActivityAt=isoNow();
+ r.phase='night';r.dayNumber=0;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.hunterShotFromNight=false;r.lastProtectedId=null;r.wolfChat=[];r.wolfKillTargetId=null;r.wolfKillLockedBy=null;r.startedAt=isoNow();r.lastActivityAt=isoNow();
  log(db,req.session.user.name,'เริ่มเกม WEREWOLF',`${r.code} · ${n} คน · หมาป่า ${deck.wolfCount} · บทบาทพิเศษ ${deck.specialCount} · ชาวบ้าน ${deck.villagerCount}`);writeDB(db);res.json({ok:true,roleConfig:r.roleConfig,counts:{wolves:deck.wolfCount,special:deck.specialCount,villagers:deck.villagerCount}});
 });
 app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
@@ -742,7 +743,7 @@ app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
  if(!hunter||String(r.pendingHunterId)!==String(hunter.userId)||hunter.role!=='hunter'||hunter.hunterShotUsed)return res.status(403).json({error:'ไม่มีสิทธิ์ใช้กระสุนตอบโต้'});
  const target=r.players.find(p=>String(p.userId)===String(req.body?.targetId)&&p.alive);
  if(!target||String(target.userId)===String(hunter.userId))return res.status(400).json({error:'เลือกเป้าหมายไม่ถูกต้อง'});
- target.alive=false;target.deathReason='hunter';target.deathEvent={id:`${r.id}:${r.dayNumber||0}:${target.userId}:hunter:${Date.now()}`,cause:'hunter',createdAt:isoNow()};hunter.hunterShotUsed=true;r.pendingHunterId=null;
+ target.alive=false;target.deathReason='hunter';target.deathEvent={id:`${r.id}:${r.dayNumber||0}:${target.userId}:hunter:${Date.now()}`,cause:'hunter',createdAt:isoNow()};hunter.hunterShotUsed=true;r.pendingHunterId=null;r.hunterShotFromNight=false;
  wwEnsureHost(r);
  if(!wwCheckWin(r)){
   // A hunter killed at night returns the village to day even if lastVote from a prior day remains.
@@ -755,7 +756,7 @@ app.post('/api/werewolf/:id/hunter-shot',auth,(req,res)=>{
 app.post('/api/werewolf/:id/rematch',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
  if(!r||r.phase!=='finished'||String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องหลังจบเกมเท่านั้น'});
- r.players=r.players.filter(p=>!p.left);if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players.length){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}r.phase='lobby';r.dayNumber=0;r.winner=null;r.resultText=null;r.finishedAt=null;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.lastProtectedId=null;r.wolfChat=[];r.wolfKillTargetId=null;r.wolfKillLockedBy=null;
+ r.players=r.players.filter(p=>!p.left);if(!r.players.some(p=>String(p.userId)===String(r.hostId))&&r.players.length){r.hostId=r.players[0].userId;r.hostName=r.players[0].name;}r.phase='lobby';r.dayNumber=0;r.winner=null;r.resultText=null;r.finishedAt=null;r.lastNight=null;r.lastVote=null;r.pendingHunterId=null;r.hunterShotFromNight=false;r.lastProtectedId=null;r.wolfChat=[];r.wolfKillTargetId=null;r.wolfKillLockedBy=null;
  r.players.forEach(p=>{p.left=false;p.role=null;p.alive=true;p.nightAction=null;p.voted=null;p.seerResult=null;p.deathEvent=null;p.witchSaveUsed=false;p.witchPoisonUsed=false;p.hunterShotUsed=false;p.priestSaveUsed=false;p.mediumUsed=false;p.mediumResult=null;p.detectiveResult=null;p.assassinUsed=false;p.kingSaved=false;p.deathReason=null;});
  r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true});
 });
