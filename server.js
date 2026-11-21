@@ -530,7 +530,7 @@ app.post('/api/werewolf/create',auth,(req,res)=>{
  const db=readDB();if(!Array.isArray(db.werewolfRooms))db.werewolfRooms=[];
  const title=String(req.body?.title||'หมู่บ้านรัตติกาล').trim().slice(0,50);
  if(!title)return res.status(400).json({error:'กรุณาตั้งชื่อห้อง'});
- const room={id:`ww-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,code:String(Math.floor(100000+Math.random()*900000)),title,phase:'lobby',hostId:req.session.user.id,hostName:req.session.user.name,players:[],dayNumber:0,winner:null,createdAt:isoNow(),lastActivityAt:isoNow(),lastNight:null,wolfChat:[],wolfKillTargetId:null,wolfKillLockedBy:null,roleConfig:{seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false}};
+ const room={id:`ww-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,code:String(Math.floor(100000+Math.random()*900000)),title,phase:'lobby',hostId:req.session.user.id,hostName:req.session.user.name,players:[],dayNumber:0,winner:null,createdAt:isoNow(),lastActivityAt:isoNow(),lastNight:null,wolfChat:[],wolfKillTargetId:null,wolfKillLockedBy:null,roleConfig:{seer:true,witch:true,bodyguard:false,guardian:false,hunter:false,jester:false,detective:false,priest:false,medium:false,infected:false,king:false,assassin:false,alpha:false}};
  room.players.push({userId:req.session.user.id,name:req.session.user.name,role:null,alive:true,nightAction:null,voted:null});
  db.werewolfRooms.push(room);log(db,req.session.user.name,'สร้างห้อง WEREWOLF',room.code);writeDB(db);res.json({ok:true,roomId:room.id});
 });
@@ -586,11 +586,20 @@ app.post('/api/werewolf/:id/configure',auth,(req,res)=>{
  if(!r||r.phase!=='lobby')return res.status(400).json({error:'ตั้งค่าบทบาทได้เฉพาะก่อนเริ่มเกม'});
  if(String(r.hostId)!==String(req.session.user.id))return res.status(403).json({error:'เฉพาะเจ้าของห้องเท่านั้นที่ตั้งค่าได้'});
  const submitted=req.body?.roleConfig&&typeof req.body.roleConfig==='object'?req.body.roleConfig:req.body;
+ // Save role preferences independently of the current player count.
+ // The final role-deck validation happens only when the host starts the game.
  const roleConfig=wwNormalizeRoleConfig(submitted,r.roleConfig);
- if(r.players.length<4)return res.status(400).json({error:'ต้องมีผู้เล่นอย่างน้อย 4 คน'});
- const deck=wwBuildRoleDeck(r.players.length,roleConfig);
- if(deck.error)return res.status(400).json({error:deck.error});
- r.roleConfig=deck.roleConfig;r.lastActivityAt=isoNow();writeDB(db);res.json({ok:true,roleConfig:r.roleConfig,counts:{wolves:deck.wolfCount,special:deck.specialCount,villagers:deck.villagerCount}});
+ r.roleConfig=roleConfig;
+ r.lastActivityAt=isoNow();
+ writeDB(db);
+ const preview=wwBuildRoleDeck(r.players.length,roleConfig);
+ res.json({
+  ok:true,
+  roleConfig:r.roleConfig,
+  counts:preview.error?null:{wolves:preview.wolfCount,special:preview.specialCount,villagers:preview.villagerCount},
+  validForCurrentPlayers:!preview.error,
+  previewError:preview.error||null
+ });
 });
 app.post('/api/werewolf/:id/start',auth,(req,res)=>{
  const db=readDB(),r=wwRoomFor(db,req.params.id);
