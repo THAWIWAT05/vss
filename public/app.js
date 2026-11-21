@@ -162,29 +162,34 @@ function installWerewolfSkillEffects(){
  @media(prefers-reduced-motion:reduce){#wwSkillFx *,#wwSkillFx *:before{animation-duration:.01ms!important;animation-iteration-count:1!important}}
  `;document.head.appendChild(st);
 }
+let werewolfEffectQueue=Promise.resolve();
+function queueWerewolfEffect(run){
+ const task=werewolfEffectQueue.catch(()=>{}).then(run);
+ werewolfEffectQueue=task.catch(()=>{});
+ return task;
+}
+
 function showWerewolfNightAnnouncement(night,roomId){
  if(!night||!roomId)return;
  const key=`gcWWNightAnnouncement:${roomId}:${night.announcedAt||night.nightNumber||'latest'}`;
  try{if(localStorage.getItem(key))return;localStorage.setItem(key,'1')}catch{}
- // Wait for the longest night/death GIF scene (6.5s) to finish before showing the report.
- const existing=document.getElementById('wwNightAnnouncementPopup');
- if(existing)return;
+ if(document.getElementById('wwNightAnnouncementPopup'))return;
  const names=Array.isArray(night.killed)?night.killed.filter(Boolean):[];
  const el=document.createElement('div');el.id='wwNightAnnouncementPopup';
  el.style.cssText='position:fixed;inset:0;z-index:100000;display:none;place-items:center;padding:18px;background:#020711a8;backdrop-filter:blur(5px);animation:wwNightPopIn .22s ease-out';
  const title=names.length?'รายงานเหตุการณ์เมื่อคืน':'รายงานรุ่งเช้า · ไม่มีผู้เสียชีวิต';
  const detail=names.length?`เมื่อคืนมีผู้เสียชีวิต：${names.map(esc).join('、')}`:'ทุกคนรอดชีวิตจากเหตุการณ์เมื่อคืนนี้';
  el.innerHTML=`<style>@keyframes wwNightPopIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}@keyframes wwNightPopOut{to{opacity:0;transform:scale(.98)}}</style><div style="width:min(480px,100%);padding:24px 22px;border:1px solid #c29a68;border-radius:20px;background:linear-gradient(145deg,#342a22,#172337);color:#f8ead6;text-align:center;box-shadow:0 24px 90px #000b"><div style="font-size:42px;margin-bottom:8px">${names.length?'⚰️':'🌤️'}</div><div style="font-size:11px;letter-spacing:2px;color:#d6b78e;font-weight:900">VILLAGE NIGHT REPORT</div><h2 style="margin:8px 0 10px;color:#ffe0b2;font-size:22px">${title}</h2><p style="margin:0;color:#eee0ce;line-height:1.7;font-size:15px">${detail}</p>${night.saved?'<p style="margin:10px 0 0;color:#9fe0b2;font-size:13px">มีผู้ได้รับการช่วยชีวิต</p>':''}${night.bodyguardSacrifice?'<p style="margin:6px 0 0;color:#b9d5ff;font-size:13px">บอดี้การ์ดสละตัวปกป้องเป้าหมาย</p>':''}<div style="height:3px;margin-top:20px;border-radius:9px;background:#ffffff24;overflow:hidden"><div id="wwNightPopupProgress" style="height:100%;width:100%;background:#d6ad78;transform-origin:left;animation:wwNightPopupTimer 5s linear forwards"></div></div></div><style>@keyframes wwNightPopupTimer{to{transform:scaleX(0)}}</style>`;
- // Keep the popup mounted but hidden while death/skill GIF scenes finish.
  document.body.appendChild(el);
- // Death GIFs run for 6.5 seconds; leave a small gap before the 5-second report popup.
- setTimeout(()=>{
-  if(!document.body.contains(el))return;
-  el.style.display='grid';
-  el.style.animation='wwNightPopIn .22s ease-out';
-  const timer=setTimeout(()=>{el.style.animation='wwNightPopOut .2s ease-in forwards';setTimeout(()=>el.remove(),220)},5000);
-  el.addEventListener('click',()=>{clearTimeout(timer);el.remove()},{once:true});
- },6800);
+ // Queue the report behind any skill and death scenes, rather than relying on a fixed delay.
+ setTimeout(()=>queueWerewolfEffect(()=>new Promise(resolve=>{
+  if(!document.body.contains(el)){resolve();return;}
+  el.style.display='grid';el.style.animation='wwNightPopIn .22s ease-out';
+  let finished=false;
+  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);el.style.animation='wwNightPopOut .2s ease-in forwards';setTimeout(()=>{el.remove();resolve()},220)};
+  const timer=setTimeout(finish,5000);
+  el.addEventListener('click',finish,{once:true});
+ })),6800);
 }
 
 function showWerewolfSkillEffect(kind,targetName=''){
@@ -192,15 +197,18 @@ function showWerewolfSkillEffect(kind,targetName=''){
   seer:{className:'seer',icon:'🔮',asset:'/assets/death-fx/seer-inspect.gif',kicker:'ORACLE VISION · TRUTH REVEALED',title:'ญาณหยั่งรู้ถูกปลุกขึ้น',desc:'ม่านเวทมนตร์เปิดเผยความจริงของผู้เล่นที่คุณเลือก'},
   protect:{className:'protect',icon:'🛡️',asset:'/assets/death-fx/bodyguard-protect.gif',kicker:'GUARDIAN AEGIS · PROTECTION CAST',title:'กำแพงพิทักษ์ถูกกางออก',desc:'พลังป้องกันโอบล้อมเป้าหมาย ปกป้องจากอันตรายในค่ำคืนนี้'}
  };
- const cfg=configs[kind];if(!cfg)return;
- document.getElementById('wwSkillFx')?.remove();
- const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
- const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
- el.innerHTML=`<button class="wwskill-close" type="button">ข้ามฉาก ×</button><div class="wwskill-card"><div class="wwskill-visual"><div class="wwskill-ring"></div><img src="${cfg.asset}" alt="" draggable="false"><span class="wwskill-fallback" hidden>${cfg.icon}</span></div><div class="wwskill-kicker">${cfg.kicker}</div><h2>${cfg.title}</h2><p>${cfg.desc}</p>${target}</div>`;
- document.body.appendChild(el);
- const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
- img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
- const close=()=>el.remove();const timer=setTimeout(close,4800);el.querySelector('.wwskill-close').addEventListener('click',()=>{clearTimeout(timer);close()});
+ const cfg=configs[kind];if(!cfg)return Promise.resolve();
+ return queueWerewolfEffect(()=>new Promise(resolve=>{
+  document.getElementById('wwSkillFx')?.remove();
+  const el=document.createElement('div');el.id='wwSkillFx';el.className=cfg.className;el.setAttribute('aria-live','polite');
+  const target=targetName?`<p>เป้าหมาย: <b>${esc(targetName)}</b></p>`:'';
+  el.innerHTML=`<button class="wwskill-close" type="button">ข้ามฉาก ×</button><div class="wwskill-card"><div class="wwskill-visual"><div class="wwskill-ring"></div><img src="${cfg.asset}" alt="" draggable="false"><span class="wwskill-fallback" hidden>${cfg.icon}</span></div><div class="wwskill-kicker">${cfg.kicker}</div><h2>${cfg.title}</h2><p>${cfg.desc}</p>${target}</div>`;
+  document.body.appendChild(el);
+  const img=el.querySelector('img'),fallback=el.querySelector('.wwskill-fallback');
+  img.addEventListener('error',()=>{img.hidden=true;fallback.hidden=false},{once:true});
+  let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);el.remove();resolve()};
+  const timer=setTimeout(finish,4800);el.querySelector('.wwskill-close').addEventListener('click',finish);
+ }));
 }
 
 function showWerewolfDeathEffect(event,roomId){
@@ -212,11 +220,14 @@ function showWerewolfDeathEffect(event,roomId){
   poison:{kicker:'TOXIC CURSE · FATAL DOSE',title:'พิษร้ายคร่าชีวิตคุณ',desc:'ขวดยาพิษเรืองแสงสั่นไหว ก่อนพลังพิษปะทุออกมา',sound:'poison',asset:'/assets/death-fx/poison.gif'}
  }[event.cause];
  if(!copy)return;
- document.getElementById('wwDeathFx')?.remove();
- const el=document.createElement('div');el.id='wwDeathFx';el.className=event.cause;el.setAttribute('role','alert');
- el.innerHTML=`<div class="wwfx-actor"><img src="${copy.asset}" alt="" draggable="false"></div>${event.cause==='wolf'?'<div class="wwfx-slash"></div>':''}<div class="wwfx-flash"></div><div class="wwfx-title"><small>${copy.kicker}</small><h2>${copy.title}</h2><p>${copy.desc}</p></div><button class="wwfx-skip" type="button">ข้ามฉาก ×</button>`;
- document.body.appendChild(el);GCSound.play(copy.sound);
- const close=()=>{el.remove()};const timer=setTimeout(close,6500);el.querySelector('.wwfx-skip').addEventListener('click',()=>{clearTimeout(timer);close()});
+ return queueWerewolfEffect(()=>new Promise(resolve=>{
+  document.getElementById('wwDeathFx')?.remove();
+  const el=document.createElement('div');el.id='wwDeathFx';el.className=event.cause;el.setAttribute('role','alert');
+  el.innerHTML=`<div class="wwfx-actor"><img src="${copy.asset}" alt="" draggable="false"></div>${event.cause==='wolf'?'<div class="wwfx-slash"></div>':''}<div class="wwfx-flash"></div><div class="wwfx-title"><small>${copy.kicker}</small><h2>${copy.title}</h2><p>${copy.desc}</p></div><button class="wwfx-skip" type="button">ข้ามฉาก ×</button>`;
+  document.body.appendChild(el);GCSound.play(copy.sound);
+  let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);el.remove();resolve()};
+  const timer=setTimeout(finish,6500);el.querySelector('.wwfx-skip').addEventListener('click',finish);
+ }));
 }
 
 function installReportsNav(){
