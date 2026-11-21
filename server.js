@@ -683,12 +683,9 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
    p.witchPoisonUsed=true;p.nightAction={type:'poison',targetId};
   }else p.nightAction={type:'skip'};
  }else if(p.role==='bodyguard'||p.role==='guardian'){
-  if(type==='skip'){p.nightAction={type:'skip'};}
-  else {
-   if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
-   if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
-   p.nightAction={type:'protect',targetId};
-  }
+  if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
+  if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
+  p.nightAction={type:'protect',targetId};
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
  r.lastActivityAt=isoNow();
  if(wwNightReady(r))wwResolveNight(r);
