@@ -640,6 +640,9 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
   if(p.role==='seer'&&type==='inspect'&&p.nightAction.type==='inspect'&&String(p.nightAction.targetId)===targetId&&p.seerResult){
    return res.json({ok:true,phase:r.phase,seerResult:{isWolf:!!p.seerResult.isWolf}});
   }
+  if(p.role==='detective'&&type==='inspect'&&p.nightAction.type==='inspect'&&String(p.nightAction.targetId)===targetId&&p.detectiveResult){
+   return res.json({ok:true,phase:r.phase,detectiveResult:{isWolf:!!p.detectiveResult.isWolf,isAlpha:!!p.detectiveResult.isAlpha}});
+  }
   return res.status(400).json({error:'คุณส่งคำสั่งคืนนี้แล้ว'});
  }
  const target=r.players.find(x=>String(x.userId)===targetId&&x.alive);
@@ -649,10 +652,13 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
   r.wolfKillTargetId=targetId;r.wolfKillLockedBy=String(p.userId);
   p.nightAction={type:'kill',targetId};
  }else if(p.role==='seer'||p.role==='detective'){
-  if(type!=='inspect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
-  const result={targetId:String(target.userId),isWolf:WW_WOLF_ROLES.includes(target.role),checkedAt:isoNow()};
-  if(p.role==='seer')p.seerResult=result;else p.detectiveResult={...result,isAlpha:target.role==='alpha'};
-  p.nightAction={type:'inspect',targetId};
+  if(type==='skip'){p.nightAction={type:'skip'};}
+  else {
+   if(type!=='inspect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นที่ยังมีชีวิตเพื่อตรวจสอบ'});
+   const result={targetId:String(target.userId),isWolf:WW_WOLF_ROLES.includes(target.role),checkedAt:isoNow()};
+   if(p.role==='seer')p.seerResult=result;else p.detectiveResult={...result,isAlpha:target.role==='alpha'};
+   p.nightAction={type:'inspect',targetId};
+  }
   }else if(p.role==='medium'){
   if(type==='skip'){p.nightAction={type:'skip'};}
   else {
@@ -677,13 +683,16 @@ app.post('/api/werewolf/:id/night-action',auth,(req,res)=>{
    p.witchPoisonUsed=true;p.nightAction={type:'poison',targetId};
   }else p.nightAction={type:'skip'};
  }else if(p.role==='bodyguard'||p.role==='guardian'){
-  if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
-  if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
-  p.nightAction={type:'protect',targetId};
+  if(type==='skip'){p.nightAction={type:'skip'};}
+  else {
+   if(type!=='protect'||!target||String(target.userId)===String(p.userId))return res.status(400).json({error:'เลือกผู้เล่นอื่นที่ยังมีชีวิตเพื่อปกป้อง'});
+   if(p.role==='guardian'&&String(r.lastProtectedId||'')===targetId)return res.status(400).json({error:'ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน'});
+   p.nightAction={type:'protect',targetId};
+  }
  }else return res.status(403).json({error:'บทบาทของคุณไม่มีคำสั่งในเวลากลางคืน'});
  r.lastActivityAt=isoNow();
  if(wwNightReady(r))wwResolveNight(r);
- writeDB(db);res.json({ok:true,phase:r.phase,...(p.role==='seer'&&type==='inspect'?{seerResult:{isWolf:!!p.seerResult?.isWolf}}:{}),...(p.role==='detective'&&type==='inspect'?{detectiveResult:{isWolf:!!p.detectiveResult?.isWolf}}:{})});
+ writeDB(db);res.json({ok:true,phase:r.phase,...(p.role==='seer'&&type==='inspect'?{seerResult:{isWolf:!!p.seerResult?.isWolf}}:{}),...(p.role==='detective'&&type==='inspect'?{detectiveResult:{isWolf:!!p.detectiveResult?.isWolf,isAlpha:!!p.detectiveResult?.isAlpha}}:{})});
 });
 // Private night chat for living wolf-team players only.
 app.post('/api/werewolf/:id/wolf-chat',auth,(req,res)=>{
