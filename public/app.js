@@ -1053,6 +1053,7 @@ function testCenter(){
  installTestCenterStyles();
  const runs=testRunData?.runs||[],latest=runs[0];
  const totalRuns=runs.length,passedRuns=runs.filter(x=>x.status==='passed').length,failedRuns=runs.filter(x=>x.status==='failed').length;
+ const highRisk=(latest?.results||[]).filter(item=>item.status==='failed'&&item.severity==='high').length;
  return `<section class="gct-shell"><header class="gct-hero"><div><div class="gct-kicker">GANG CONTROL · QUALITY ASSURANCE</div><div class="gct-title">🧪 ศูนย์ทดสอบเกมอัตโนมัติ</div><div class="gct-muted">Full Engine QA · ตรวจทุกบทบาท เงื่อนไขชนะ–แพ้ ลำดับสกิล และกรณีผิดปกติ โดยแยกจากห้องเล่นจริง</div></div><button class="gct-btn ghost" id="gctRefresh">↻ รีเฟรชรายงาน</button></header>
  <div class="gct-body"><div class="gct-stats"><div class="gct-stat"><b>${totalRuns}</b><small>ชุดทดสอบล่าสุด</small></div><div class="gct-stat"><b style="color:#8fe0b0">${passedRuns}</b><small>ผ่านทั้งหมด</small></div><div class="gct-stat"><b style="color:#ff9ca8">${failedRuns}</b><small>พบปัญหา</small></div><div class="gct-stat"><b>${latest?latest.total:'-'}</b><small>กรณีทดสอบล่าสุด</small></div><div class="gct-stat"><b style="color:${highRisk?'#ff9ca8':'#8fe0b0'}">${highRisk}</b><small>ข้อผิดพลาดความเสี่ยงสูง</small></div></div>
  <section class="gct-panel"><h3 style="margin:0 0 5px">ตั้งค่าการทดสอบ</h3><div class="gct-muted">ระบบจะสร้างผู้เล่นจำลองและรันกรณีทดสอบกับ Game Engine ที่ใช้งานอยู่</div>
