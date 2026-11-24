@@ -1254,6 +1254,157 @@ function gcBuildGameTestCases(game, botCount) {
     return 'บันทึกสถานะ ผู้ชนะ ผลลัพธ์ และเวลา';
   }, ['finish','state']);
 
+
+  // DEEP GAME REGRESSION: verify real helper behavior, secrecy and edge cases.
+  add('bingo', 'โครงสร้างเส้นชนะตรงตามรูปแบบกระดานจริง', () => {
+    const lines=bingoLines();
+    const expectedRows=Array.from({length:5},(_,r)=>Array.from({length:5},(_,c)=>r*5+c));
+    const expectedCols=Array.from({length:5},(_,c)=>Array.from({length:5},(_,r)=>r*5+c));
+    const key=x=>x.join(',');
+    for(const line of [...expectedRows,...expectedCols,[0,6,12,18,24],[4,8,12,16,20]])
+      gcTestAssert(lines.some(x=>key(x)===key(line)),`ขาดเส้นชนะ ${key(line)}`);
+    const short=lines.filter(x=>x.length===4);
+    gcTestAssert(short.length===4 && short.every(x=>new Set(x).size===4 && x.every(i=>i>=0&&i<25)), 'เส้นทแยงย่อย 4 เส้นผิดรูปแบบ');
+    gcTestAssert(new Set(lines.map(key)).size===lines.length,'พบเส้นชนะซ้ำ');
+    return 'ตรวจพิกัดจริงของ 5 แถว 5 คอลัมน์ 2 ทแยงใหญ่ และ 4 ทแยงย่อย';
+  }, ['bingo','geometry','regression']);
+  add('bingo', 'ช่องฟรีกลางถูกนับในเส้นชนะโดยไม่ต้องรอเลขสุ่ม', () => {
+    const line=bingoLines().find(x=>x.includes(12));
+    gcTestAssert(!!line,'ไม่พบเส้นที่ผ่านช่องฟรี');
+    const marked=Array(25).fill(false); line.forEach(i=>{if(i!==12)marked[i]=true;}); marked[12]=true;
+    gcTestAssert(!!bingoWinningLine({marked}),'ช่องฟรีไม่ถูกนับในเงื่อนไขเส้นชนะ');
+    return 'ช่องกลางถูกทำเครื่องหมายเริ่มต้นและใช้ร่วมกับเส้นชนะได้';
+  }, ['bingo','free-space']);
+  add('bingo', 'ข้อมูลการ์ดผู้เล่นไม่รั่วไปยังผู้เล่นคนอื่น', () => {
+    const a={userId:'1',name:'A',card:makeBingoCard(),marked:Array(25).fill(false)};
+    const b={userId:'2',name:'B',card:makeBingoCard(),marked:Array(25).fill(false)};
+    const room={id:'B-PRIV',title:'QA',status:'playing',hostId:'1',hostName:'A',drawn:[],players:[a,b],winners:[]};
+    const view=bingoRoomPublic(room,{session:{user:{id:'1'}}});
+    gcTestAssert(view.player && view.player.card===a.card,'ผู้เล่นไม่เห็นการ์ดของตัวเอง');
+    gcTestAssert(!view.players.some(x=>Object.prototype.hasOwnProperty.call(x,'card')),'พบข้อมูลการ์ดในรายการผู้เล่นสาธารณะ');
+    return 'ส่งเฉพาะการ์ดของบัญชีที่ร้องขอ ไม่เผยการ์ดของคนอื่น';
+  }, ['bingo','privacy']);
+  add('bingo', 'การสร้างการ์ดจำนวนมากยังคงผ่านข้อกำหนดทุกคอลัมน์', () => {
+    for(let n=0;n<1000;n++){
+      const card=makeBingoCard();
+      gcTestAssert(card.length===25&&card[12]===null,`การ์ด ${n+1} รูปแบบผิด`);
+      for(let c=0;c<5;c++){
+        const values=Array.from({length:5},(_,r)=>card[r*5+c]);
+        gcTestAssert(new Set(values).size===5,`การ์ด ${n+1} คอลัมน์ ${c+1} ซ้ำ`);
+        const min=c*15+1,max=min+14;
+        gcTestAssert(values.every(v=>v===null||(v>=min&&v<=max)),`การ์ด ${n+1} คอลัมน์ ${c+1} เลขนอกช่วง`);
+      }
+    }
+    return 'สุ่มและตรวจการ์ด 1,000 ใบ';
+  }, ['bingo','stress','randomized']);
+
+  add('impostor', 'ข้อมูลคำลับไม่รั่วให้ Impostor ก่อนจบเกม', () => {
+    const room={id:'IM-PRIV',code:'123456',title:'QA',category:Object.keys(IMPOSTOR_WORDS)[0],phase:'clue',hostId:'1',hostName:'A',word:'SECRET-QA',players:[
+      {userId:'1',name:'A',role:'impostor',alive:true,clue:null,voted:null},
+      {userId:'2',name:'B',role:'crew',alive:true,clue:null,voted:null}
+    ]};
+    const impostor=impostorPublic(room,{session:{user:{id:'1'}}});
+    const crew=impostorPublic(room,{session:{user:{id:'2'}}});
+    gcTestAssert(impostor.me.word===null,'Impostor เห็นคำลับก่อนจบเกม');
+    gcTestAssert(crew.me.word==='SECRET-QA','ฝ่ายลูกเรือไม่เห็นคำลับ');
+    gcTestAssert(impostor.clues.length===0&&crew.clues.length===0,'คำใบ้ถูกเปิดก่อนช่วงโหวต');
+    gcTestAssert(impostor.players.every(x=>!Object.prototype.hasOwnProperty.call(x,'role')),'role ถูกเปิดเผยก่อนจบเกม');
+    return 'ตรวจการซ่อนคำลับ คำใบ้ และบทบาทในช่วง clue';
+  }, ['impostor','privacy','information-leak']);
+  add('impostor', 'เปิดเผยคำลับและชื่อ Impostor ได้หลังจบเกมเท่านั้น', () => {
+    const room={id:'IM-END',code:'123456',title:'QA',category:Object.keys(IMPOSTOR_WORDS)[0],phase:'finished',hostId:'1',hostName:'A',word:'SECRET-QA',players:[
+      {userId:'1',name:'A',role:'impostor',alive:false,clue:'x',voted:'2'},
+      {userId:'2',name:'B',role:'crew',alive:true,clue:'y',voted:'1'}
+    ]};
+    const view=impostorPublic(room,{session:{user:{id:'2'}}});
+    gcTestAssert(view.wordReveal==='SECRET-QA'&&view.impostorNames==='A','ข้อมูลเฉลยหลังจบเกมไม่ครบ');
+    gcTestAssert(view.players.some(x=>x.userId==='1'&&x.alive===false),'สถานะผู้เล่นที่ถูกจับไม่ถูกส่ง');
+    return 'เฉลยคำและตัวตน Impostor หลังจบเกม';
+  }, ['impostor','privacy','finish']);
+  add('impostor', 'คะแนนโหวตของผู้เล่นที่ตายแล้วไม่ถูกนำมาคิด', () => {
+    const players=[
+      {userId:'1',role:'crew',alive:true,voted:'2'},
+      {userId:'2',role:'impostor',alive:true,voted:'1'},
+      {userId:'3',role:'crew',alive:false,voted:'2'}
+    ];
+    const room={players,hostId:'1',hostName:'A',phase:'vote'}; impostorResolveVotes(room);
+    gcTestAssert(room.phase==='finished'&&room.winner==='impostor','คะแนนจากผู้เล่นตายมีผลต่อผลโหวต');
+    gcTestAssert(players[2].alive===false,'ผู้เล่นที่ตายถูกคืนสถานะโดยไม่ตั้งใจ');
+    return 'นับเฉพาะคะแนนจากผู้เล่นที่ยังมีชีวิต';
+  }, ['impostor','vote','edge-case']);
+  add('impostor', 'ห้ามเปิดเผยคำใบ้ในช่วงส่งคำใบ้และเปิดเมื่อถึงช่วงโหวต', () => {
+    const room={id:'IM-CLUE',code:'123456',title:'QA',category:Object.keys(IMPOSTOR_WORDS)[0],phase:'clue',hostId:'1',hostName:'A',word:'X',players:[
+      {userId:'1',name:'A',role:'crew',alive:true,clue:'ทะเล',voted:null},
+      {userId:'2',name:'B',role:'impostor',alive:true,clue:'น้ำ',voted:null}
+    ]};
+    const before=impostorPublic(room,{session:{user:{id:'1'}}});
+    room.phase='vote';
+    const after=impostorPublic(room,{session:{user:{id:'1'}}});
+    gcTestAssert(before.clues.length===0,'คำใบ้ปรากฏก่อนเข้าสู่ช่วงโหวต');
+    gcTestAssert(after.clues.length===2,'คำใบ้ไม่ปรากฏเมื่อเข้าสู่ช่วงโหวต');
+    return 'ตรวจการเปิดคำใบ้ตาม phase';
+  }, ['impostor','phase','privacy']);
+
+  add('werewolf', 'role deck ทุกขนาดที่รองรับมีจำนวนบทบาทตรงจำนวนผู้เล่น', () => {
+    for(let n=6;n<=16;n++){
+      const deck=wwBuildRoleDeck(n,{});
+      gcTestAssert(!deck.error&&deck.roles.length===n,`ผู้เล่น ${n} คนได้จำนวนบทบาทผิด`);
+      gcTestAssert(deck.roles.filter(x=>WW_WOLF_ROLES.includes(x)).length===deck.wolfCount,`ผู้เล่น ${n} คนได้จำนวนหมาป่าผิด`);
+      gcTestAssert(deck.roles.includes('villager'),`ผู้เล่น ${n} คนไม่มีชาวบ้าน`);
+    }
+    return 'ตรวจ role deck ครบตั้งแต่ 6–16 คน';
+  }, ['werewolf','roles','boundary']);
+  add('werewolf', 'ค่า false ใน role config ต้องปิดบทบาทแม้ fallback จะเปิดไว้', () => {
+    const cfg=wwNormalizeRoleConfig({seer:false,witch:true},{seer:true,witch:false,guardian:true});
+    gcTestAssert(cfg.seer===false&&cfg.witch===true&&cfg.guardian===true,'ค่า false ถูก fallback เขียนทับ');
+    return 'ยืนยัน explicit false ชนะค่า fallback';
+  }, ['werewolf','roles','configuration']);
+  add('werewolf', 'การโหวตที่ยังไม่ครบต้องไม่เปลี่ยน phase หรือคัดผู้เล่นออก', () => {
+    const a=wwPlayer(1,'villager',{voted:'2'}),b=wwPlayer(2,'wolf',{voted:null}),c=wwPlayer(3,'seer',{voted:'2'});
+    const room=wwRoom([a,b,c],{phase:'vote'}); const result=wwResolveVoteRound(room);
+    gcTestAssert(!result.resolved&&room.phase==='vote'&&a.alive&&b.alive&&c.alive,'มีการเปลี่ยนสถานะก่อนโหวตครบ');
+    return 'รอคะแนนจากผู้เล่นที่ยังมีชีวิตทุกคน';
+  }, ['werewolf','vote','incomplete']);
+  add('werewolf', 'การข้ามโหวตทั้งหมดต้องไม่คัดใครออกและเริ่มกลางคืน', () => {
+    const players=[wwPlayer(1,'villager',{voted:'skip'}),wwPlayer(2,'wolf',{voted:'skip'}),wwPlayer(3,'seer',{voted:'skip'})];
+    const room=wwRoom(players,{phase:'vote'}); const result=wwResolveVoteRound(room);
+    gcTestAssert(result.resolved&&players.every(p=>p.alive)&&room.phase==='night','การ skip ทั้งหมดทำให้มีผู้ถูกคัดออกหรือ phase ผิด');
+    gcTestAssert(players.every(p=>p.voted===null),'ไม่ล้างสถานะโหวตหลังจบรอบ');
+    return 'ทุกคน skip แล้วไม่มีผู้ถูกคัดออกและกลับสู่กลางคืน';
+  }, ['werewolf','vote','skip']);
+  add('werewolf', 'คะแนนหมาป่าเสมอกันต้องไม่สุ่มฆ่าเป้าหมายเอง', () => {
+    const wolf1=wwPlayer(1,'wolf',{nightAction:{type:'kill',targetId:'3'}}),wolf2=wwPlayer(2,'alpha',{nightAction:{type:'kill',targetId:'4'}});
+    const a=wwPlayer(3,'villager'),b=wwPlayer(4,'seer');
+    const room=wwRoom([wolf1,wolf2,a,b],{phase:'night',wolfKillTargetId:null}); wwResolveNight(room);
+    gcTestAssert(a.alive&&b.alive,'ระบบเลือกเป้าหมายเมื่อคะแนนหมาป่าเสมอ');
+    return 'คะแนนหมาป่าเสมอไม่มีเป้าหมายโจมตี';
+  }, ['werewolf','wolf-vote','tie']);
+  add('werewolf', 'ผู้เล่นที่ตายแล้วต้องไม่ถูกนับในคิวกลางคืน', () => {
+    const dead=wwPlayer(1,'seer',{alive:false}),alive=wwPlayer(2,'villager');
+    const room=wwRoom([dead,alive],{phase:'night'});
+    gcTestAssert(wwStageDone(room,WW_NIGHT_STAGES.find(x=>x.roles.includes('seer'))),'ผู้หยั่งรู้ที่ตายแล้วยังค้างคิว');
+    gcTestAssert(wwCurrentNightStage(room)===null,'พบคิวกลางคืนที่ไม่มีผู้เล่นมีชีวิต');
+    return 'ผู้เล่นที่ตายแล้วไม่ทำให้ stage ค้าง';
+  }, ['werewolf','turn-order','dead-player']);
+  add('werewolf', 'ข้อมูลบทบาทผู้เล่นถูกซ่อนจนกว่าเกมจะจบ', () => {
+    const room=wwRoom([wwPlayer(1,'wolf'),wwPlayer(2,'seer')],{phase:'day'});
+    const req={session:{user:{id:2}}}; const before=wwPublic(room,req);
+    gcTestAssert(before.players.every(p=>p.role===undefined),'เปิดเผย role ก่อนจบเกม');
+    room.phase='finished'; const after=wwPublic(room,req);
+    gcTestAssert(after.players.every(p=>typeof p.role==='string'),'ไม่เปิดเผย role หลังจบเกม');
+    return 'ตรวจการปกปิดและเฉลย role ตามสถานะเกม';
+  }, ['werewolf','privacy']);
+  add('werewolf', 'หมาป่าที่ตายแล้วไม่ถูกนับในเงื่อนไขชัยชนะ', () => {
+    const room=wwRoom([wwPlayer(1,'wolf',{alive:false}),wwPlayer(2,'villager'),wwPlayer(3,'seer')]);
+    gcTestAssert(wwCheckWin(room)&&room.winner==='village','หมาป่าที่ตายแล้วยังถูกนับ');
+    return 'คำนวณฝ่ายชนะจากผู้เล่นที่ยังมีชีวิตเท่านั้น';
+  }, ['werewolf','win-condition','dead-player']);
+  add('werewolf', 'ผู้พิทักษ์ห้ามป้องกันเป้าหมายเดิมติดกันตาม guard ของ API', () => {
+    const src=fs.readFileSync(path.join(__dirname,'server.js'),'utf8');
+    gcTestAssert(/guardian.*lastProtectedId/.test(src)&&/ผู้พิทักษ์ห้ามปกป้องคนเดิมติดต่อกันสองคืน/.test(src),'ไม่พบ guard ป้องกันเป้าหมายเดิม');
+    return 'พบการตรวจ lastProtectedId ก่อนรับคำสั่ง protect';
+  }, ['werewolf','role:guardian','api-validation']);
+
   return cases;
 }
 
@@ -1365,6 +1516,72 @@ function gcBuildSystemAuditCases() {
     }
     return `สร้างและตรวจการ์ด ${count} ชุดใน process เดียว`;
   }, ['performance','randomized','bingo']);
+
+  add('Game API: route คำสั่งหลักทุกเกมต้องมี auth middleware', () => {
+    const src=readSource('server.js');
+    const routes=[
+      "app.post('/api/bingo/create'","app.post('/api/bingo/:id/join'","app.post('/api/bingo/:id/start'","app.post('/api/bingo/:id/tick'","app.post('/api/bingo/:id/mark'","app.post('/api/bingo/:id/claim'",
+      "app.post('/api/impostor/create'","app.post('/api/impostor/:id/join'","app.post('/api/impostor/:id/start'","app.post('/api/impostor/:id/clue'","app.post('/api/impostor/:id/vote'","app.post('/api/impostor/:id/guess'",
+      "app.post('/api/werewolf/create'","app.post('/api/werewolf/:id/join'","app.post('/api/werewolf/:id/start'","app.post('/api/werewolf/:id/night-action'","app.post('/api/werewolf/:id/open-vote'","app.post('/api/werewolf/:id/vote'","app.post('/api/werewolf/:id/hunter-shot'"
+    ];
+    for(const route of routes){const at=src.indexOf(route);gcTestAssert(at>=0,`ไม่พบ route ${route}`);const head=src.slice(at,at+180);gcTestAssert(/auth\s*,/.test(head),`route ไม่มี auth: ${route}`);}
+    return `ตรวจพบ route เกมหลัก ${routes.length} endpoint พร้อม auth middleware`;
+  }, ['security','game-api','static-audit']);
+  add('Game API: endpoint จัดการห้องของแอดมินมี adminOnly', () => {
+    const src=readSource('server.js');
+    const routes=["app.delete('/api/bingo/:id'","app.delete('/api/impostor/:id'","app.delete('/api/werewolf/:id'","app.patch('/api/admin/rooms/:game/:id/lock'","app.delete('/api/admin/rooms/:game/:id/players/:playerId'","app.post('/api/admin/rooms/:game/:id/reset'","app.delete('/api/admin/rooms/:game/:id'"];
+    for(const route of routes){gcTestAssert(src.includes(route+",auth,adminOnly"),`route ไม่มี auth/adminOnly: ${route}`);}
+    return `ตรวจ route แอดมิน ${routes.length} endpoint`;
+  }, ['security','admin','game-api']);
+
+
+  add('Werewolf API: night-action มี handler ครบทุกบทบาทและตรวจสิทธิ์ใช้ครั้งเดียว', () => {
+    const src=readSource('server.js');
+    const at=src.indexOf("app.post('/api/werewolf/:id/night-action'");
+    const end=src.indexOf('// Private night chat',at);
+    gcTestAssert(at>=0&&end>at,'ไม่พบ night-action route');
+    const block=src.slice(at,end);
+    for(const role of ['seer','detective','medium','priest','assassin','witch','bodyguard','guardian'])
+      gcTestAssert(block.includes(`p.role==='${role}'`),`ไม่มี handler บทบาท ${role}`);
+    gcTestAssert(block.includes('WW_WOLF_ROLES.includes(p.role)'),'ไม่มี handler สำหรับ wolf/alpha');
+    for(const token of ['mediumUsed','priestSaveUsed','assassinUsed','witchSaveUsed','witchPoisonUsed','lastProtectedId'])
+      gcTestAssert(block.includes(token),`ไม่มี guard การใช้สิทธิ์ ${token}`);
+    return 'ตรวจ handler 10 กลุ่มบทบาทรวม wolf/alpha และตัวแปรสิทธิ์ใช้ครั้งเดียว';
+  }, ['werewolf','role-coverage','api-validation']);
+  add('Werewolf API: การยิงนายพรานต้องจำกัดผู้ยิง เป้าหมาย และการใช้ซ้ำ', () => {
+    const src=readSource('server.js');
+    const at=src.indexOf("app.post('/api/werewolf/:id/hunter-shot'");
+    const block=src.slice(at,at+1800);
+    gcTestAssert(at>=0&&block.includes('pendingHunterId')&&block.includes('hunterShotUsed'),'ขาดการตรวจสถานะนายพราน');
+    gcTestAssert(block.includes('target')&&block.includes('alive'),'ขาดการตรวจเป้าหมายที่ยังมีชีวิต');
+    gcTestAssert(block.includes('wwApplyHunterShot'),'ไม่เรียกตัวประมวลผลการยิง');
+    return 'ตรวจ pending hunter, เป้าหมายที่ยังมีชีวิต และการใช้กระสุน';
+  }, ['werewolf','role:hunter','api-validation']);
+  add('BINGO API: ป้องกันการกดช่องผิดและอ้างสิทธิ์ชนะโดยไม่มีเส้นครบ', () => {
+    const src=readSource('server.js');
+    const markAt=src.indexOf("app.post('/api/bingo/:id/mark'");
+    const claimAt=src.indexOf("app.post('/api/bingo/:id/claim'");
+    const mark=src.slice(markAt,claimAt);
+    const claim=src.slice(claimAt,claimAt+1800);
+    gcTestAssert(markAt>=0&&claimAt>markAt,'ไม่พบ mark/claim route');
+    for(const token of ['Number.isInteger(index)','index<0','index>24','index===12','r.drawn.includes'])
+      gcTestAssert(mark.includes(token),`mark ขาด guard ${token}`);
+    gcTestAssert(claim.includes('bingoLines()')&&claim.includes('every(i=>p.marked[i])'),'claim ไม่ตรวจเส้นที่ทำเครื่องหมายครบ');
+    return 'ตรวจช่วง index, ช่องฟรี, เลขที่ยังไม่ออก และเส้นชนะครบ';
+  }, ['bingo','api-validation','win-condition']);
+  add('IMPOSTOR API: ป้องกันส่งคำใบ้/โหวตซ้ำและจำกัดการทายคำ', () => {
+    const src=readSource('server.js');
+    const clueAt=src.indexOf("app.post('/api/impostor/:id/clue'");
+    const voteAt=src.indexOf("app.post('/api/impostor/:id/vote'");
+    const guessAt=src.indexOf("app.post('/api/impostor/:id/guess'");
+    const clue=src.slice(clueAt,voteAt),vote=src.slice(voteAt,guessAt),guess=src.slice(guessAt,guessAt+1400);
+    gcTestAssert(clueAt>=0&&voteAt>clueAt&&guessAt>voteAt,'ไม่พบ action routes');
+    gcTestAssert(clue.includes('p.clue')&&clue.includes('clue.length>45'),'ไม่ป้องกันคำใบ้ซ้ำหรือยาวเกิน');
+    gcTestAssert(vote.includes('p.voted')&&vote.includes('target.alive')&&vote.includes('target.userId)===String(p.userId)'),'ไม่ป้องกันโหวตซ้ำ/โหวตเป้าหมายผิด');
+    gcTestAssert(guess.includes("p.role!=='impostor'")&&guess.includes("r.phase!=='guess'"),'ไม่จำกัดการทายเฉพาะ Impostor ใน phase ที่ถูกต้อง');
+    return 'ตรวจคำใบ้ซ้ำ ความยาว โหวตซ้ำ/เป้าหมาย และสิทธิ์ทายคำ';
+  }, ['impostor','api-validation','permissions']);
+
   return cases;
 }
 
@@ -1392,7 +1609,7 @@ function gcExecuteGameTest(game, botCount, repetitions) {
     game, botCount, repetitions, status: failed ? 'failed' : 'passed',
     total: results.length, passed, failed, coverage: byGame,
     durationMs: Date.now() - started, createdAt: isoNow(), completedAt: isoNow(), results,
-    scope: { engineHelpers: true, roleCoverage: true, sourceAudit: true, securityStaticAudit: true, databaseConfigAudit: true, frontendWiringAudit: true, stressLite: true, apiHttpE2E: false, browserE2E: false, liveDatabase: false, realLoadTest: false, liveRoomsTouched: false }
+    scope: { engineHelpers: true, roleCoverage: true, privacyRegression: true, gameRouteStaticAudit: true, sourceAudit: true, securityStaticAudit: true, databaseConfigAudit: true, frontendWiringAudit: true, stressLite: true, apiHttpE2E: false, browserE2E: false, liveDatabase: false, realLoadTest: false, liveRoomsTouched: false }
   };
 }
 
