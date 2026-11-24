@@ -47,7 +47,7 @@ const seed = () => ({
     { id: 202, name: 'ผ้าพันแผล', category: 'เวชภัณฑ์', qty: 50, unit: 'ชิ้น', min: 10 },
     { id: 203, name: 'น้ำ', category: 'เสบียง', qty: 30, unit: 'ขวด', min: 5 }
   ],
-  attendance: [], requests: [], deliveries: [], dailyTasks: [], contributions: [], withdrawals: [], logs: []
+  attendance: [], requests: [], deliveries: [], dailyTasks: [], contributions: [], withdrawals: [], logs: [], testRuns: []
 });
 // บัญชีทดสอบสำหรับทดลองเกมเท่านั้น: เก็บใน users แต่ไม่สร้างแถวใน members
 const TEST_ACCOUNTS = Array.from({ length: 5 }, (_, i) => ({
@@ -72,7 +72,7 @@ function ensureTestAccounts(db) {
 }
 
 function normalizeDB(db) {
-  for (const k of ['users', 'members', 'items', 'attendance', 'requests', 'deliveries', 'dailyTasks', 'contributions', 'withdrawals', 'logs', 'bingoRooms', 'impostorRooms', 'werewolfRooms']) if (!Array.isArray(db[k])) db[k] = [];
+  for (const k of ['users', 'members', 'items', 'attendance', 'requests', 'deliveries', 'dailyTasks', 'contributions', 'withdrawals', 'logs', 'bingoRooms', 'impostorRooms', 'werewolfRooms', 'testRuns']) if (!Array.isArray(db[k])) db[k] = [];
   return db;
 }
 function readDB() {
@@ -962,6 +962,162 @@ function adminRoomCollections(db){return [
 ];}
 function adminFindRoom(db,game,id){const group=adminRoomCollections(db).find(x=>x.game===game);return group?group.rooms.find(r=>String(r.id)===String(id)):null;}
 function adminRoomSummary(group,r){const players=group.players(r);return {game:group.game,gameLabel:group.label,id:r.id,title:r.title||`${group.label} ROOM`,code:r.code||String(r.id).slice(-6),status:group.status(r)||'unknown',hostName:group.host(r)||'-',hostId:r.hostId,playerCount:players.length,players:players.map(p=>({userId:p.userId,name:p.name,alive:p.alive!==false,role:p.role||null})),createdAt:group.created(r)||null,lastActivityAt:r.lastActivityAt||r.createdAt||null,adminLocked:!!r.adminLocked};}
+
+// =====================================
+// ADMIN GAME AUTO TESTER
+// Isolated engine-level simulations: never creates or mutates live game rooms.
+// =====================================
+function gcTestAssert(condition, message) {
+  if (!condition) throw new Error(message || 'เงื่อนไขไม่ผ่าน');
+}
+function gcRunCase(game, name, fn) {
+  const started = Date.now();
+  try {
+    const details = fn();
+    return { id: `${game}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, game, name, status: 'passed', details: String(details || 'ตรวจสอบผ่าน'), durationMs: Date.now() - started };
+  } catch (error) {
+    return { id: `${game}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, game, name, status: 'failed', details: String(error?.message || error || 'เกิดข้อผิดพลาด').slice(0, 300), durationMs: Date.now() - started };
+  }
+}
+function gcBuildGameTestCases(game, botCount) {
+  const cases = [];
+  const add = (g, name, fn) => { if (game === 'all' || game === g) cases.push(() => gcRunCase(g, name, fn)); };
+
+  add('bingo', 'สร้างการ์ดบิงโกของบอท', () => {
+    const cards = Array.from({ length: botCount }, () => makeBingoCard());
+    gcTestAssert(cards.length === botCount, 'จำนวนการ์ดไม่ตรงกับจำนวนบอท');
+    cards.forEach((card, index) => {
+      gcTestAssert(Array.isArray(card) && card.length === 25, `บอท ${index + 1}: การ์ดต้องมี 25 ช่อง`);
+      gcTestAssert(card[12] === null, `บอท ${index + 1}: ช่องกลางต้องเป็นช่องฟรี`);
+      for (let col = 0; col < 5; col++) {
+        const values = Array.from({ length: 5 }, (_, row) => card[row * 5 + col]).filter(v => v !== null);
+        gcTestAssert(new Set(values).size === values.length, `บอท ${index + 1}: มีเลขซ้ำในคอลัมน์ ${col + 1}`);
+        const min = col * 15 + 1, max = min + 14;
+        gcTestAssert(values.every(v => Number.isInteger(v) && v >= min && v <= max), `บอท ${index + 1}: เลขผิดช่วงคอลัมน์ ${col + 1}`);
+      }
+    });
+    return `สร้างการ์ด ${cards.length} ใบ · ตรวจเลขซ้ำ ช่วงตัวเลข และช่องฟรีแล้ว`;
+  });
+  add('bingo', 'สุ่มเลขครบ 1–75 โดยไม่ซ้ำ', () => {
+    const bag = Array.from({ length: 75 }, (_, i) => i + 1);
+    for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+    gcTestAssert(bag.length === 75 && new Set(bag).size === 75, 'ชุดเลขสุ่มมีจำนวนผิดหรือมีเลขซ้ำ');
+    gcTestAssert(Math.min(...bag) === 1 && Math.max(...bag) === 75, 'ชุดเลขสุ่มไม่ครอบคลุม 1–75');
+    return 'สุ่มจำลองครบ 75 หมายเลขโดยไม่มีเลขซ้ำ';
+  });
+  add('bingo', 'ตรวจเส้นชนะและเงื่อนไขบิงโก', () => {
+    const lines = bingoLines();
+    gcTestAssert(lines.length === 16, `จำนวนเส้นชนะควรเป็น 16 แต่ได้ ${lines.length}`);
+    gcTestAssert(lines.every(line => line.length === 4 || line.length === 5), 'พบเส้นชนะที่มีจำนวนช่องไม่ถูกต้อง');
+    const row = lines.find(line => line.length === 5 && line[0] === 0);
+    const player = { marked: Array(25).fill(false) };
+    row.forEach(i => player.marked[i] = true);
+    gcTestAssert(!!bingoWinningLine(player), 'ระบบไม่ตรวจพบเส้นแนวนอนที่ครบ');
+    return 'ตรวจพบเส้นชนะ 16 รูปแบบ และตรวจแถวที่ครบได้';
+  });
+
+  add('impostor', 'จำลองโหวตจับ Impostor', () => {
+    const players = Array.from({ length: botCount }, (_, i) => ({ userId: String(i + 1), name: `BOT ${i + 1}`, role: i === botCount - 1 ? 'impostor' : 'crew', alive: true, voted: String(botCount) }));
+    const room = { players, hostId: '1', hostName: 'BOT 1', phase: 'vote' };
+    impostorResolveVotes(room);
+    gcTestAssert(room.phase === 'guess', `หลังจับ Impostor ควรเข้าสู่ guess แต่ได้ ${room.phase}`);
+    gcTestAssert(room.caughtId === String(botCount), 'ระบบระบุผู้ถูกจับไม่ตรงกับ Impostor');
+    gcTestAssert(players[botCount - 1].alive === false, 'ผู้ถูกจับยังมีสถานะมีชีวิต');
+    return `บอท ${botCount} คนโหวตตรงกัน · ระบบจับ Impostor และเปลี่ยนช่วงได้`;
+  });
+  add('impostor', 'ตรวจกรณีคะแนนโหวตเสมอ', () => {
+    const players = [
+      { userId: '1', name: 'BOT 1', role: 'crew', alive: true, voted: '3' },
+      { userId: '2', name: 'BOT 2', role: 'crew', alive: true, voted: '3' },
+      { userId: '3', name: 'BOT 3', role: 'impostor', alive: true, voted: '4' },
+      { userId: '4', name: 'BOT 4', role: 'crew', alive: true, voted: '4' }
+    ];
+    const room = { players, hostId: '1', hostName: 'BOT 1', phase: 'vote' };
+    impostorResolveVotes(room);
+    gcTestAssert(room.phase === 'finished' && room.winner === 'impostor', 'กรณีเสมอต้องจบเกมโดยฝ่าย Impostor ชนะ');
+    gcTestAssert(players.every(p => p.alive), 'กรณีเสมอไม่ควรคัดผู้เล่นออก');
+    return 'คะแนนเสมอแล้วจบเกมตามกติกา โดยไม่มีผู้เล่นถูกคัดออก';
+  });
+
+  add('werewolf', 'จัดสรรบทบาทตามจำนวนบอท', () => {
+    const deck = wwBuildRoleDeck(botCount, {});
+    gcTestAssert(!deck.error, deck.error || 'สร้างชุดบทบาทไม่สำเร็จ');
+    gcTestAssert(deck.roles.length === botCount, `จำนวนบทบาท ${deck.roles.length} ไม่เท่ากับจำนวนบอท ${botCount}`);
+    gcTestAssert(deck.roles.filter(role => WW_WOLF_ROLES.includes(role)).length === deck.wolfCount, 'จำนวนหมาป่าไม่ตรงกับที่คำนวณ');
+    gcTestAssert(deck.villagerCount >= 1, 'ต้องเหลือชาวบ้านอย่างน้อย 1 คน');
+    return `จัดสรร ${botCount} บทบาท · หมาป่า ${deck.wolfCount} · ชาวบ้าน ${deck.villagerCount}`;
+  });
+  add('werewolf', 'ตรวจเงื่อนไขชนะของฝ่ายหมาป่า', () => {
+    const room = { phase: 'night', players: [
+      { userId: '1', role: 'wolf', alive: true },
+      { userId: '2', role: 'wolf', alive: true },
+      { userId: '3', role: 'villager', alive: true },
+      { userId: '4', role: 'villager', alive: true }
+    ] };
+    gcTestAssert(wwCheckWin(room) === true && room.phase === 'finished' && room.winner === 'wolf', 'จำนวนหมาป่าเท่าชาวบ้านต้องเป็นชัยชนะของหมาป่า');
+    return 'หมาป่าเท่ากับชาวบ้านแล้วระบบประกาศชัยชนะถูกต้อง';
+  });
+  add('werewolf', 'ตรวจเงื่อนไขชนะของฝ่ายชาวบ้าน', () => {
+    const room = { phase: 'night', players: [
+      { userId: '1', role: 'villager', alive: true },
+      { userId: '2', role: 'seer', alive: true },
+      { userId: '3', role: 'wolf', alive: false }
+    ] };
+    gcTestAssert(wwCheckWin(room) === true && room.phase === 'finished' && room.winner === 'village', 'เมื่อไม่มีหมาป่าที่มีชีวิต ฝ่ายชาวบ้านต้องชนะ');
+    return 'ไม่มีหมาป่าที่ยังมีชีวิตแล้วระบบประกาศชัยชนะชาวบ้านถูกต้อง';
+  });
+  return cases;
+}
+function gcExecuteGameTest(game, botCount, repetitions) {
+  const started = Date.now(), results = [];
+  for (let round = 1; round <= repetitions; round++) {
+    for (const run of gcBuildGameTestCases(game, botCount)) {
+      const result = run();
+      result.round = round;
+      results.push(result);
+    }
+  }
+  const passed = results.filter(x => x.status === 'passed').length;
+  const failed = results.length - passed;
+  const roomCode = `TST-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  return {
+    id: `TEST-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    roomCode, roomName: game === 'all' ? 'ห้องทดลองทุกเกม' : `ห้องทดลอง ${game.toUpperCase()}`,
+    botPlayers: Array.from({ length: botCount }, (_, i) => `BOT-${String(i + 1).padStart(2, '0')}`),
+    title: game === 'all' ? 'ทดสอบทุกเกม' : `ทดสอบ ${game.toUpperCase()}`,
+    game, botCount, repetitions, status: failed ? 'failed' : 'passed',
+    total: results.length, passed, failed, durationMs: Date.now() - started,
+    createdAt: isoNow(), completedAt: isoNow(), results
+  };
+}
+app.get('/api/admin/test-runs', auth, adminOnly, (req, res) => {
+  const db = readDB();
+  res.json({ runs: (db.testRuns || []).slice(0, 30) });
+});
+app.post('/api/admin/test-runs', auth, adminOnly, (req, res) => {
+  const db = readDB();
+  const game = String(req.body?.game || 'all');
+  const botCount = Number(req.body?.botCount ?? 8);
+  const repetitions = Number(req.body?.repetitions ?? 1);
+  if (!['all', 'bingo', 'impostor', 'werewolf'].includes(game)) return res.status(400).json({ error: 'ประเภทเกมไม่ถูกต้อง' });
+  if (!Number.isInteger(botCount) || botCount < 6 || botCount > 16) return res.status(400).json({ error: 'จำนวนบอทต้องอยู่ระหว่าง 6–16 คน' });
+  if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 5) return res.status(400).json({ error: 'จำนวนรอบทดสอบต้องอยู่ระหว่าง 1–5 รอบ' });
+  const run = gcExecuteGameTest(game, botCount, repetitions);
+  db.testRuns.unshift(run);
+  db.testRuns = db.testRuns.slice(0, 30);
+  log(db, req.session.user.name, 'เริ่มทดสอบเกมอัตโนมัติ', `${run.title} · ${run.passed}/${run.total} ผ่าน · ${run.failed} พบปัญหา`);
+  writeDB(db);
+  res.json({ run });
+});
+app.delete('/api/admin/test-runs/:id', auth, adminOnly, (req, res) => {
+  const db = readDB(), before = db.testRuns.length;
+  db.testRuns = db.testRuns.filter(run => String(run.id) !== String(req.params.id));
+  if (db.testRuns.length === before) return res.status(404).json({ error: 'ไม่พบรายงานทดสอบนี้' });
+  log(db, req.session.user.name, 'ลบรายงานทดสอบเกม', String(req.params.id));
+  writeDB(db);
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/rooms',auth,adminOnly,(req,res)=>{
  const db=readDB(),rooms=adminRoomCollections(db).flatMap(g=>g.rooms.map(r=>adminRoomSummary(g,r))).sort((a,b)=>String(b.lastActivityAt||'').localeCompare(String(a.lastActivityAt||'')));
  const counts={total:rooms.length,playing:rooms.filter(r=>['playing','night','day','vote','clue','guess','hunter_shot'].includes(r.status)).length,waiting:rooms.filter(r=>['waiting','lobby'].includes(r.status)).length,players:rooms.reduce((n,r)=>n+r.playerCount,0),locked:rooms.filter(r=>r.adminLocked).length};
