@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
 let historyAbsentOnly = false, adminRoomState = null, adminRoomSelection = null, adminRoomPlayerId = null, adminRoomView = null, adminRoomPollTimer = null, adminRoomBusy = false;
-let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
-const pageNames = { adminRooms:'ศูนย์จัดการห้อง', dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
+let testRunData = null, testRunBusy = false; let state = null, werewolfState = null, werewolfPollBusy = false, werewolfActionBusy = false, werewolfForceLobby = false, werewolfRequestSeq = 0, bingoState = null, bingoWinnerSignature = null, bingoPollCounter = 0, impostorState = null, impostorPollBusy = false, page = 'dashboard', selectedSession = 's1630', selectedDate = new Date().toLocaleDateString('en-CA'), auditData = null, auditRange = { from: '', to: '', q: '' }, wheelRotation = 0, wheelBusy = false, savedWheelTeams = null;
+const pageNames = { adminRooms:'ศูนย์จัดการห้อง', testCenter:'ศูนย์ทดสอบเกม', dashboard:'ภาพรวม', bingo:'BINGO', impostor:'IMPOSTOR', werewolf:'WEREWOLF', wheel:'วงล้อชื่อ', audit:'ประวัติการทำงาน', attendance:'ระบบเช็กชื่อ', members:'สมาชิก', inventory:'คลังไอเทม', deliveries:'ระบบส่งของ', history:'ประวัติ' };
 const statusNames = { present:'มา', late:'มาสาย', absent:'ขาด', leave:'ลา', business:'ติดธุระ', unmarked:'ยังไม่เช็ก' };
 const statusClass = { present:'green', late:'yellow', absent:'red', leave:'blue', business:'yellow', unmarked:'red' };
 const money = n => '฿' + Number(n || 0).toLocaleString('th-TH');
@@ -210,7 +210,9 @@ function installReportsNav(){
  const auditBtn=document.querySelector('.nav-item[data-page="audit"]');
  let adminRoomsBtn=document.querySelector('.nav-item[data-page="adminRooms"]');
  if(!adminRoomsBtn){adminRoomsBtn=document.createElement('button');adminRoomsBtn.className='nav-item';adminRoomsBtn.dataset.page='adminRooms';adminRoomsBtn.innerHTML='<span>🖥️</span><span>ศูนย์จัดการห้อง</span>';adminRoomsBtn.addEventListener('click',()=>{if(!isAdmin())return;page='adminRooms';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===adminRoomsBtn));loadAdminRooms().catch(e=>toast(e.message));render()});}
- if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,adminRoomsBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,adminRoomsBtn);
+ let gameTesterBtn=document.querySelector('.nav-item[data-page="testCenter"]');
+ if(!gameTesterBtn){gameTesterBtn=document.createElement('button');gameTesterBtn.className='nav-item';gameTesterBtn.dataset.page='testCenter';gameTesterBtn.innerHTML='<span>🧪</span><span>ศูนย์ทดสอบเกม</span>';gameTesterBtn.addEventListener('click',()=>{if(!isAdmin())return;page='testCenter';document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===gameTesterBtn));if(!testRunData)testRunData={runs:[]};render();loadTestRuns().then(()=>render()).catch(e=>toast(e.message));});}
+ if(auditBtn)nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,adminRoomsBtn,gameTesterBtn,auditBtn);else nav.append(wheelBtn,bingoBtn,impostorBtn,werewolfBtn,adminRoomsBtn,gameTesterBtn);
 }
 function installWheelStyles(){if($('#wheelStyles'))return;const st=document.createElement('style');st.id='wheelStyles';st.textContent=`
 .report-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.report-toolbar .field{min-width:160px;flex:1}
@@ -293,7 +295,7 @@ async function refresh(){state=await api('/api/data?date='+encodeURIComponent(se
 
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>{if(b.classList.contains('hidden'))return;page=b.dataset.page;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x===b));render();if(page==='audit')loadAudit().catch(e=>toast(e.message));if(page==='adminRooms')loadAdminRooms().catch(e=>toast(e.message))});
 
-function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={adminRooms,dashboard,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();if(adminRoomPollTimer){clearInterval(adminRoomPollTimer);adminRoomPollTimer=null;}if(page==='adminRooms'){if(!adminRoomState)loadAdminRooms().catch(e=>toast(e.message));adminRoomPollTimer=setInterval(()=>{if(page==='adminRooms')loadAdminRooms().catch(()=>{})},3500);}}
+function render(){if(!state)return;$('#crumb').textContent=pageNames[page];$('#pageTitle').textContent=pageNames[page];const c=$('#content');const views={adminRooms,testCenter,dashboard,bingo,impostor,werewolf,wheel,audit,attendance,members,inventory,deliveries,history};c.innerHTML=views[page]();wire();if(adminRoomPollTimer){clearInterval(adminRoomPollTimer);adminRoomPollTimer=null;}if(page==='adminRooms'){if(!adminRoomState)loadAdminRooms().catch(e=>toast(e.message));adminRoomPollTimer=setInterval(()=>{if(page==='adminRooms')loadAdminRooms().catch(()=>{})},3500);}if(page==='testCenter'&&!testRunData&&!testRunBusy){testRunData={runs:[]};loadTestRuns().then(()=>render()).catch(e=>toast(e.message));}}
 
 async function loadAdminRooms(){
  if(adminRoomBusy)return;adminRoomBusy=true;
@@ -1025,7 +1027,59 @@ async function loadBingo(roomId,forceLobby=false){
 }
 async function bingoAction(url,body={}){await api(url,{method:'POST',body:JSON.stringify(body)});await loadBingo(bingoState?.room?.id)}
 
+
+async function loadTestRuns(){
+ if(testRunBusy)return;
+ testRunBusy=true;
+ try{testRunData=await api('/api/admin/test-runs');}
+ finally{testRunBusy=false;}
+}
+function installTestCenterStyles(){
+ if($('#gcTestCenterStyles'))return;
+ const st=document.createElement('style');st.id='gcTestCenterStyles';st.textContent=`
+ .gct-shell{--gct-line:#303b52;background:radial-gradient(ellipse at 85% -10%,#263d5b 0,#151d2d 42%,#0c111c 100%);color:#edf3fb;border:1px solid #34445c;border-radius:20px;overflow:hidden;box-shadow:0 20px 55px #02081255}
+ .gct-hero{padding:26px 28px;background:linear-gradient(110deg,#121d2c,#1d3550 62%,#2c2947);border-bottom:1px solid #3a5069;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+ .gct-kicker{font-size:10px;letter-spacing:3px;color:#9bc5e8;font-weight:900}.gct-title{font-size:clamp(27px,4vw,39px);font-weight:1000;margin:5px 0}.gct-muted{font-size:12px;color:#aabbd0;line-height:1.65}
+ .gct-body{padding:18px;display:grid;gap:15px}.gct-panel{background:linear-gradient(145deg,#182638,#111a28);border:1px solid #30435a;border-radius:15px;padding:17px}
+ .gct-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.gct-stat{background:#101a28;border:1px solid #2c3e54;border-radius:12px;padding:13px}.gct-stat b{display:block;font-size:25px;color:#eaf4ff}.gct-stat small{font-size:11px;color:#9fb2c8}
+ .gct-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:13px}.gct-field{display:grid;gap:6px}.gct-field label{font-size:11px;color:#a9bdd2;font-weight:800}.gct-field select{width:100%;padding:11px;border:1px solid #40546b;border-radius:9px;background:#0c1725;color:#f4f7fb}
+ .gct-btn{border:1px solid #6796bd;background:linear-gradient(110deg,#397eae,#315e86);color:#fff;border-radius:10px;padding:11px 15px;font-weight:900;cursor:pointer}.gct-btn:disabled{opacity:.5;cursor:not-allowed}.gct-btn.ghost{background:#172638;border-color:#40546b}.gct-btn.danger{background:#6f303c;border-color:#a34b5a}
+ .gct-run{border:1px solid #2e4056;border-radius:12px;background:#101a28;padding:13px;margin-top:10px}.gct-run-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}.gct-tag{font-size:10px;font-weight:900;padding:5px 9px;border-radius:999px;background:#174d37;color:#a9f0c8}.gct-tag.fail{background:#572b35;color:#ffc0c8}.gct-results{display:grid;gap:7px;margin-top:11px}.gct-case{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:9px;align-items:start;border-top:1px solid #26374b;padding-top:8px;font-size:12px}.gct-pass{color:#8fe0b0;font-weight:900}.gct-fail{color:#ff9ca8;font-weight:900}.gct-note{padding:11px 12px;border:1px solid #665a36;border-radius:10px;background:#302b1d;color:#e8d6a8;font-size:12px;line-height:1.6}
+ @media(max-width:700px){.gct-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.gct-form{grid-template-columns:1fr}.gct-body{padding:11px}.gct-hero{padding:19px}.gct-case{grid-template-columns:1fr auto}}
+ `;
+ document.head.appendChild(st);
+}
+function testCenter(){
+ installTestCenterStyles();
+ const runs=testRunData?.runs||[],latest=runs[0];
+ const totalRuns=runs.length,passedRuns=runs.filter(x=>x.status==='passed').length,failedRuns=runs.filter(x=>x.status==='failed').length;
+ return `<section class="gct-shell"><header class="gct-hero"><div><div class="gct-kicker">GANG CONTROL · QUALITY ASSURANCE</div><div class="gct-title">🧪 ศูนย์ทดสอบเกมอัตโนมัติ</div><div class="gct-muted">จำลองผู้เล่นบอท ตรวจตรรกะเกม และบันทึกรายงานข้อผิดพลาดโดยไม่แตะห้องเล่นจริง</div></div><button class="gct-btn ghost" id="gctRefresh">↻ รีเฟรชรายงาน</button></header>
+ <div class="gct-body"><div class="gct-stats"><div class="gct-stat"><b>${totalRuns}</b><small>ชุดทดสอบล่าสุด</small></div><div class="gct-stat"><b style="color:#8fe0b0">${passedRuns}</b><small>ผ่านทั้งหมด</small></div><div class="gct-stat"><b style="color:#ff9ca8">${failedRuns}</b><small>พบปัญหา</small></div><div class="gct-stat"><b>${latest?latest.total:'-'}</b><small>กรณีทดสอบล่าสุด</small></div></div>
+ <section class="gct-panel"><h3 style="margin:0 0 5px">ตั้งค่าการทดสอบ</h3><div class="gct-muted">ระบบจะสร้างผู้เล่นจำลองและรันกรณีทดสอบกับ Game Engine ที่ใช้งานอยู่</div>
+ <div class="gct-form"><div class="gct-field"><label for="gctGame">เกมที่ต้องการทดสอบ</label><select id="gctGame"><option value="all">ทุกเกม</option><option value="werewolf">🐺 Werewolf</option><option value="impostor">🕵️ Impostor</option><option value="bingo">🎯 Bingo</option></select></div><div class="gct-field"><label for="gctBots">จำนวนผู้เล่นจำลอง</label><select id="gctBots"><option value="6">6 คน</option><option value="8" selected>8 คน</option><option value="10">10 คน</option><option value="12">12 คน</option><option value="16">16 คน</option></select></div><div class="gct-field"><label for="gctRepeats">จำนวนรอบทดสอบ</label><select id="gctRepeats"><option value="1">1 รอบ</option><option value="2">2 รอบ</option><option value="3">3 รอบ</option><option value="5">5 รอบ</option></select></div></div>
+ <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px"><button class="gct-btn" id="gctRun" ${testRunBusy?'disabled':''}>🧪 สร้างห้องทดลองและเริ่มทดสอบ</button><span class="gct-muted" style="align-self:center">จำกัดสูงสุด 16 บอท · 5 รอบต่อคำสั่ง</span></div></section>
+ <div class="gct-note">ℹ️ โหมดนี้ทดสอบตรรกะและสถานการณ์ของ Game Engine แบบแยกส่วน ไม่สร้างห้องจริง ไม่เรียกคำสั่งเล่นแทนสมาชิก และไม่เปลี่ยนข้อมูลสมาชิกหรือคะแนน การทดสอบผ่านไม่ได้ยืนยันว่า UI/การเชื่อมต่อเครือข่ายทุกกรณีสมบูรณ์</div>
+ <section class="gct-panel"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">ประวัติการทดสอบ</h3><span class="gct-muted">เก็บล่าสุดไม่เกิน 30 รายงาน</span></div>
+ ${runs.map(run=>`<article class="gct-run"><div class="gct-run-head"><div><b>${esc(run.title||run.game)}</b><div class="gct-muted">ห้อง ${esc(run.roomCode||run.id)} · ${fmt(run.createdAt)} · ${run.botCount} บอท · ${run.repetitions} รอบ · ${run.durationMs} ms</div></div><div style="display:flex;align-items:center;gap:8px"><span class="gct-tag ${run.status==='failed'?'fail':''}">${run.status==='passed'?'ผ่านทั้งหมด':'พบปัญหา'}</span><button class="gct-btn danger" data-gct-delete="${esc(run.id)}" style="padding:6px 9px;font-size:11px">ลบ</button></div></div><div class="gct-muted" style="margin-top:8px">ผ่าน ${run.passed}/${run.total} · พบปัญหา ${run.failed}</div><details style="margin-top:9px"><summary style="cursor:pointer;color:#b9d8f1;font-size:12px;font-weight:800">ดูรายละเอียดกรณีทดสอบ</summary><div class="gct-results">${(run.results||[]).map(item=>`<div class="gct-case"><b>${esc(String(item.game||'').toUpperCase())}</b><span><strong>${esc(item.name)}</strong><br><span class="gct-muted">${esc(item.details)}</span></span><span class="${item.status==='passed'?'gct-pass':'gct-fail'}">${item.status==='passed'?'ผ่าน':'ผิดพลาด'}</span></div>`).join('')}</div></details></article>`).join('')||'<div class="gct-muted" style="padding:18px;text-align:center">ยังไม่มีรายงาน · กดเริ่มทดสอบเพื่อสร้างรายงานแรก</div>'}
+ </section></div></section>`;
+}
+function wireTestCenter(){
+ $('#gctRefresh')?.addEventListener('click',async()=>{try{await loadTestRuns();render();toast('อัปเดตรายงานแล้ว')}catch(e){toast(e.message)}});
+ $('#gctRun')?.addEventListener('click',async()=>{
+  const button=$('#gctRun');if(button)button.disabled=true;
+  try{
+   const result=await api('/api/admin/test-runs',{method:'POST',body:JSON.stringify({game:$('#gctGame')?.value||'all',botCount:Number($('#gctBots')?.value||8),repetitions:Number($('#gctRepeats')?.value||1)})});
+   await loadTestRuns();render();
+   toast(result.run?.failed?`ทดสอบเสร็จ พบปัญหา ${result.run.failed} รายการ`:`ทดสอบเสร็จ ผ่าน ${result.run?.passed||0} กรณี`);
+  }catch(e){if(button)button.disabled=false;toast(e.message||'เริ่มทดสอบไม่สำเร็จ')}
+ });
+ document.querySelectorAll('[data-gct-delete]').forEach(button=>button.addEventListener('click',async()=>{
+  const id=button.dataset.gctDelete;if(!confirm('ลบรายงานทดสอบนี้ใช่หรือไม่?'))return;
+  try{await api(`/api/admin/test-runs/${encodeURIComponent(id)}`,{method:'DELETE'});await loadTestRuns();render();toast('ลบรายงานแล้ว')}catch(e){toast(e.message)}
+ }));
+}
 function wire(){
+ if(page==='testCenter'){wireTestCenter();return;}
  if(page==='bingo'){
   $('#bingoCreate')?.addEventListener('click',async()=>{
    const button=$('#bingoCreate');
