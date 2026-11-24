@@ -1256,11 +1256,127 @@ function gcBuildGameTestCases(game, botCount) {
 
   return cases;
 }
+
+function gcClassifyTestFailure(item) {
+  const text = `${item.name || ''} ${item.details || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
+  const rules = [
+    { key: 'security', words: ['สิทธิ์','auth','unauthorized','forbidden','permission','role','access'] },
+    { key: 'state', words: ['สถานะ','phase','state','ลำดับ','stage','คิว'] },
+    { key: 'validation', words: ['ข้อมูล','ไม่ถูกต้อง','invalid','validation','input','เลขซ้ำ'] },
+    { key: 'database', words: ['ฐานข้อมูล','database','transaction','postgres','persist'] },
+    { key: 'ui', words: ['หน้าเว็บ','ปุ่ม','ui','browser','frontend'] },
+    { key: 'lifecycle', words: ['ห้อง','ผู้เล่น','ออกจาก','host','cleanup','room'] }
+  ];
+  return rules.find(rule => rule.words.some(word => text.includes(word)))?.key || 'logic';
+}
+function gcFailureAdvice(item) {
+  const category = gcClassifyTestFailure(item);
+  const advice = {
+    security: 'ตรวจ middleware auth/adminOnly, การตรวจเจ้าของข้อมูล และการอนุญาตฝั่งเซิร์ฟเวอร์',
+    state: 'ตรวจ state machine, ลำดับ stage, guard ก่อนเปลี่ยน phase และการป้องกันคำสั่งซ้ำ',
+    validation: 'ตรวจชนิดข้อมูล ขอบเขตค่า null/undefined และ validation ทั้ง client/server',
+    database: 'ตรวจ transaction, rollback, row lock, schema และการบันทึกข้อมูลก่อนตอบกลับ',
+    ui: 'ตรวจ selector, event listener, render lifecycle และการแสดงผลเมื่อ API ล้มเหลว',
+    lifecycle: 'ตรวจ join/leave, host transfer, cleanup, timeout และการจัดการผู้เล่นที่ออก',
+    logic: 'ตรวจเงื่อนไขธุรกิจและเพิ่มกรณีทดสอบขั้นต่ำ/สูงสุด/ค่าผิดปกติ'
+  };
+  return { category, recommendation: advice[category], severity: category === 'security' || category === 'database' ? 'high' : 'medium' };
+}
+function gcBuildSystemAuditCases() {
+  const cases = [];
+  const add = (name, fn, tags = []) => cases.push(() => gcRunCase('system', name, fn, tags));
+  const readSource = (relative) => {
+    const full = path.join(__dirname, relative);
+    gcTestAssert(fs.existsSync(full), `ไม่พบไฟล์ ${relative} ใน deployment`);
+    return fs.readFileSync(full, 'utf8');
+  };
+  add('Security: ทุก endpoint ศูนย์ทดสอบมี auth และ adminOnly', () => {
+    const src = readSource('server.js');
+    for (const route of ["app.get('/api/admin/test-runs'", "app.post('/api/admin/test-runs'", "app.delete('/api/admin/test-runs/:id'"]) {
+      const at = src.lastIndexOf(route);
+      gcTestAssert(at >= 0, `ไม่พบ route ${route}`);
+      const head = src.slice(at, at + 180);
+      gcTestAssert(/auth\s*,\s*adminOnly/.test(head), `route ไม่มี auth/adminOnly: ${route}`);
+    }
+    return 'พบ middleware ป้องกันครบทุก endpoint ของ QA';
+  }, ['security','api','admin']);
+  add('Database: transaction middleware ใช้ row lock และ rollback', () => {
+    const src = readSource('server.js');
+    gcTestAssert(/BEGIN/.test(src) && /FOR UPDATE/.test(src) && /COMMIT/.test(src) && /ROLLBACK/.test(src), 'ไม่พบ transaction/lock/rollback ครบ');
+    return 'พบ BEGIN, row lock, COMMIT และ ROLLBACK';
+  }, ['database','transaction','concurrency']);
+  add('Database: โครงสร้าง testRuns ถูก normalize และจำกัดประวัติ', () => {
+    const src = readSource('server.js');
+    gcTestAssert(/'testRuns'/.test(src) && /db\.testRuns\s*=\s*db\.testRuns\.slice\(0,\s*30\)/.test(src), 'testRuns ไม่ถูก normalize หรือไม่จำกัดจำนวน');
+    return 'testRuns มีค่าเริ่มต้นและจำกัดประวัติสูงสุด 30 รายงาน';
+  }, ['database','retention']);
+  add('API: ตรวจสอบค่าที่รับจากผู้ใช้ก่อนเริ่มทดสอบ', () => {
+    const src = readSource('server.js');
+    const at = src.lastIndexOf("app.post('/api/admin/test-runs'");
+    const block = src.slice(at, at + 2200);
+    gcTestAssert(/includes\(game\)/.test(block) && /Number\.isInteger\(botCount\)/.test(block) && /Number\.isInteger\(repetitions\)/.test(block), 'ขาด validation game/botCount/repetitions');
+    return 'ตรวจ game, จำนวนบอท และจำนวนรอบก่อนรัน';
+  }, ['api','validation']);
+  add('Isolation: test runner ไม่เรียกแก้ไขห้องจริง', () => {
+    const src = readSource('server.js');
+    const at = src.lastIndexOf('function gcExecuteGameTest');
+    const end = src.indexOf("\napp.get('/api/admin/test-runs'", at);
+    const block = src.slice(at, end > at ? end : at + 6000);
+    gcTestAssert(!/db\.(bingoRooms|impostorRooms|werewolfRooms|members)\s*\./.test(block), 'พบการเข้าถึง collection ห้องจริงหรือสมาชิกใน runner');
+    gcTestAssert(/liveRoomsTouched:\s*false/.test(block), 'ขาด flag ยืนยันว่าไม่แตะห้องจริง');
+    return 'runner ทำงานกับ fixture และรายงานแยก ไม่แก้ collection ห้องจริง';
+  }, ['isolation','safety']);
+  add('Frontend: มีหน้า QA และผูก event เริ่ม/รีเฟรช/ลบรายงาน', () => {
+    const src = readSource(path.join('public','app.js'));
+    for (const token of ['function testCenter()', 'function wireTestCenter()', 'gctRun', 'gctRefresh', 'data-gct-delete', '/api/admin/test-runs']) {
+      gcTestAssert(src.includes(token), `หน้าเว็บขาดส่วนเชื่อมต่อ ${token}`);
+    }
+    return 'พบหน้า QA, ปุ่มเริ่ม, รีเฟรช, ลบ และ API binding';
+  }, ['ui','frontend']);
+  add('Frontend: หน้าศูนย์ทดสอบถูกจำกัดการมองเห็นฝั่ง UI', () => {
+    const src = readSource(path.join('public','app.js'));
+    gcTestAssert(/if\(!isAdmin\(\)\)return/.test(src) && /testCenter/.test(src), 'ไม่พบ guard สำหรับเมนูศูนย์ทดสอบ');
+    return 'พบ guard ฝั่ง UI (ยังต้องพึ่ง server-side adminOnly เป็นหลัก)';
+  }, ['ui','security']);
+  add('Security: session cookie ตั้งค่า httpOnly และ sameSite', () => {
+    const src = readSource('server.js');
+    gcTestAssert(/httpOnly:\s*true/.test(src) && /sameSite:\s*'lax'/.test(src), 'session cookie ขาด httpOnly หรือ sameSite');
+    return 'พบการตั้งค่า cookie ป้องกันการเข้าถึงจาก script และกำหนด sameSite';
+  }, ['security','session']);
+  add('Runtime: จำกัดขนาด JSON request', () => {
+    const src = readSource('server.js');
+    gcTestAssert(/express\.json\(\{\s*limit:\s*'1mb'\s*\}\)/.test(src), 'ไม่พบ JSON body size limit');
+    return 'กำหนดขนาด JSON request สูงสุด 1 MB';
+  }, ['runtime','validation']);
+  add('Role registry: รายการบทบาทพิเศษมีคีย์ไม่ซ้ำ', () => {
+    gcTestAssert(Array.isArray(WW_SPECIAL_ROLES) && new Set(WW_SPECIAL_ROLES).size === WW_SPECIAL_ROLES.length, 'รายการบทบาทพิเศษซ้ำหรือไม่ใช่ array');
+    gcTestAssert(WW_SPECIAL_ROLES.every(role => typeof role === 'string' && role.length > 0), 'พบคีย์บทบาทว่าง');
+    return `ตรวจคีย์บทบาทพิเศษ ${WW_SPECIAL_ROLES.length} รายการ`;
+  }, ['roles','registry']);
+  add('Stress-lite: สุ่มการ์ด BINGO หลายชุดโดยไม่ซ้ำในคอลัมน์', () => {
+    const count = 250;
+    for (let n = 0; n < count; n++) {
+      const card = makeBingoCard();
+      gcTestAssert(card.length === 25 && card[12] === null, `การ์ดชุด ${n + 1} ผิดโครงสร้าง`);
+      for (let col = 0; col < 5; col++) {
+        const values = Array.from({length:5},(_,row)=>card[row*5+col]);
+        gcTestAssert(new Set(values).size === 5, `การ์ดชุด ${n + 1} คอลัมน์ ${col + 1} มีเลขซ้ำ`);
+      }
+    }
+    return `สร้างและตรวจการ์ด ${count} ชุดใน process เดียว`;
+  }, ['performance','randomized','bingo']);
+  return cases;
+}
+
 function gcExecuteGameTest(game, botCount, repetitions) {
   const started = Date.now(), results = [];
   for (let round = 1; round <= repetitions; round++) {
-    for (const run of gcBuildGameTestCases(game, botCount)) {
-      const result = run(); result.round = round; results.push(result);
+    const gameCases = gcBuildGameTestCases(game, botCount);
+    const systemCases = gcBuildSystemAuditCases();
+    for (const run of [...gameCases, ...systemCases]) {
+      const result = run(); result.round = round;
+      if (result.status === 'failed') Object.assign(result, gcFailureAdvice(result));
+      results.push(result);
     }
   }
   const passed = results.filter(x => x.status === 'passed').length;
@@ -1276,7 +1392,7 @@ function gcExecuteGameTest(game, botCount, repetitions) {
     game, botCount, repetitions, status: failed ? 'failed' : 'passed',
     total: results.length, passed, failed, coverage: byGame,
     durationMs: Date.now() - started, createdAt: isoNow(), completedAt: isoNow(), results,
-    scope: { engineHelpers: true, roleCoverage: true, apiHttpE2E: false, browserE2E: false, liveDatabase: false, liveRoomsTouched: false }
+    scope: { engineHelpers: true, roleCoverage: true, sourceAudit: true, securityStaticAudit: true, databaseConfigAudit: true, frontendWiringAudit: true, stressLite: true, apiHttpE2E: false, browserE2E: false, liveDatabase: false, realLoadTest: false, liveRoomsTouched: false }
   };
 }
 
